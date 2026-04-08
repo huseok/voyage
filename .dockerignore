@@ -1,0 +1,6 @@
+.git
+.gradle
+out
+.idea
+*.iml
+README.md
