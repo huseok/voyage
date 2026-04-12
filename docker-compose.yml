@@ -1,14 +1,24 @@
+# API 容器；远端 PostgreSQL。
+# 下面 `environment` 中的 ${VAR} 由 Docker Compose 在「解析本文件时」替换，来源为：
+#   ① 当前终端已 export / $env:VAR
+#   ② 与本文件同目录的 `.env`（仅用于占位符替换，勿提交密钥）
+# 占位符默认读同目录 `.env`；要用 `.env.render.local` 请：`docker compose --env-file .env.render.local ...`（见 DEPLOY.md）。
 services:
   voyage-api:
     build:
       context: .
-      dockerfile: Dockerfile
+      # 默认完整构建；快速路径：先本机 bootJar，再设 DOCKERFILE=Dockerfile.fast（见 DEPLOY.md）
+      dockerfile: ${DOCKERFILE:-Dockerfile}
     container_name: voyage-api
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db.xufviqcdhpncrdkyelrd.supabase.co:5432/postgres
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: ${SUPABASE_DB_PASSWORD}
-      JWT_SECRET: change_me_to_a_long_secret_for_prod
+      SPRING_PROFILES_ACTIVE: cloud
+      # 默认与 application-cloud.yaml 一致：Supabase pooler（Docker 内直连 db.* 常出现 IPv6 / Network unreachable）
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require&prepareThreshold=0&preferQueryMode=simple}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-postgres.xufviqcdhpncrdkyelrd}
+      # 与 Render / .env.render.local 一致：SPRING_DATASOURCE_PASSWORD（勿提交）
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:-change_me_to_a_long_secret_for_prod}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174}
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"

@@ -2,6 +2,7 @@ package com.trioForce.voyage.product
 
 import com.trioForce.voyage.common.ApiResponse
 import com.trioForce.voyage.common.ok
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.*
  * 对前台开放查询，对后台开放维护接口。
  */
 @RestController
+@Tag(name = "Products", description = "商品查询与后台维护")
 class ProductController(
     private val productService: ProductService
 ) {

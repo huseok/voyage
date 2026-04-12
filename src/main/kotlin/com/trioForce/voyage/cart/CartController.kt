@@ -2,6 +2,7 @@ package com.trioForce.voyage.cart
 
 import com.trioForce.voyage.common.ApiResponse
 import com.trioForce.voyage.common.ok
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.*
 
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.*
  */
 @RestController
 @RequestMapping("/api/v1/cart")
+@Tag(name = "Cart", description = "购物车")
 class CartController(
     private val cartService: CartService
 ) {

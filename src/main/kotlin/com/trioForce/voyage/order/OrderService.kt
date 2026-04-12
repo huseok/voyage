@@ -4,6 +4,7 @@ import com.trioForce.voyage.cart.CartItemRepository
 import com.trioForce.voyage.common.BizException
 import com.trioForce.voyage.product.ProductRepository
 import com.trioForce.voyage.security.CurrentUser
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -104,6 +105,16 @@ class OrderService(
      * @return 当前用户全部订单（倒序）
      */
     fun listMyOrders(): List<OrderView> = orderRepository.findAllByUserIdOrderByIdDesc(CurrentUser.userId()).map { toView(it) }
+
+    /**
+     * 后台查询全部订单（按订单实体主键 id 倒序）。
+     *
+     * 与 [listMyOrders] 不同：不限制当前用户，供运营/管理员总览；调用方需已通过 ADMIN 鉴权。
+     *
+     * @return 全库订单视图列表
+     */
+    fun listAllForAdmin(): List<OrderView> =
+        orderRepository.findAll(Sort.by(Sort.Direction.DESC, "id")).map { toView(it) }
 
     /**
      * 后台录入物流信息。

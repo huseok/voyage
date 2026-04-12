@@ -1,0 +1,7 @@
+# 本机已执行：.\gradlew.bat bootJar -x test 且存在 build/libs/*.jar 时使用。
+# 构建几乎只复制 JAR，几秒完成。见 DEPLOY.md「快速镜像」。
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+COPY build/libs/*.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

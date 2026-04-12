@@ -2,6 +2,7 @@ package com.trioForce.voyage.aftersale
 
 import com.trioForce.voyage.common.ApiResponse
 import com.trioForce.voyage.common.ok
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.*
 
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.*
  * 用户可提交/查看自己的工单，后台可查看全部并更新状态。
  */
 @RestController
+@Tag(name = "After-sales", description = "售后工单")
 class AfterSaleController(
     private val afterSaleService: AfterSaleService
 ) {

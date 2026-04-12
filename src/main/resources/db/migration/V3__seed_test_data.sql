@@ -3,12 +3,12 @@
 -- 1) 表名统一使用小写 + 下划线（snake_case）命名；
 -- 2) 尽量幂等，重复执行不会产生明显脏数据。
 
--- 测试用户
+-- 测试用户（密码明文均为 Admin@123456，与 V2 同一 BCrypt）
 insert into t_users (email, password_hash, name, phone, country, role, status)
 values
   (
     'buyer1@voyage.local',
-    '$2a$10$0M6Q5S8wzqbz5aYxM7b1eeSlW77H4CSkiqhSSjMBDlNIQP5CKEM5m',
+    '$2b$10$kXRYfWNApj0moXpo3.Wd1Oso.HZ6.VTWo7NVZii6i1Ag87wLK.cQG',
     'Buyer One',
     '+86-13800000001',
     'CN',
@@ -17,7 +17,7 @@ values
   ),
   (
     'buyer2@voyage.local',
-    '$2a$10$0M6Q5S8wzqbz5aYxM7b1eeSlW77H4CSkiqhSSjMBDlNIQP5CKEM5m',
+    '$2b$10$kXRYfWNApj0moXpo3.Wd1Oso.HZ6.VTWo7NVZii6i1Ag87wLK.cQG',
     'Buyer Two',
     '+1-202-555-0102',
     'US',

@@ -47,7 +47,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"buyer1@test.com\",\n  \"password\": \"Admin@123456\"\n}"
+              "raw": "{\n  \"email\": \"buyer1@voyage.local\",\n  \"password\": \"Admin@123456\"\n}"
             }
           },
           "event": [

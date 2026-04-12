@@ -1,0 +1,11 @@
+# profile=cloud：远程 PostgreSQL。默认 URL/用户名可改；密码必须 SPRING_DATASOURCE_PASSWORD（勿提交）。
+# 说明见 DEPLOY.md §1、§2。
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require&prepareThreshold=0&preferQueryMode=simple}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres.xufviqcdhpncrdkyelrd}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  flyway:
+    # 云库 public 常有既有对象；可用环境变量覆盖
+    baseline-on-migrate: true
+    baseline-version: "0"

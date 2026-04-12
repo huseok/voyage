@@ -1,3 +1,4 @@
+# 公共 Spring 配置；默认 profile 为 cloud，数据源见 application-cloud.yaml。
 server:
   port: 8080
 
@@ -5,10 +6,10 @@ spring:
   application:
     name: voyage
 
+  profiles:
+    default: cloud
+
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/voyage_db}
-    username: ${SPRING_DATASOURCE_USERNAME:voyage_user}
-    password: ${SPRING_DATASOURCE_PASSWORD:change_me}
     driver-class-name: org.postgresql.Driver
 
   jpa:
