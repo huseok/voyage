@@ -246,6 +246,18 @@ docker build -t zhangsan/voyage-api:1.0.0 .
 docker images <你的DockerHub用户名>/voyage-api --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.ID}}"
 ```
 
+#### 6.2.1 服务器构建失败（Kaniko 等）：`lstat /root/.kotlin/daemon/...`
+
+**说明**：这是 **云端/CI 用 Kaniko 打镜像** 时的错误（日志里常见 `Taking snapshot of full filesystem`），**不是** 本机 `docker compose up` 后 Spring 业务日志里的异常。Gradle 已 `BUILD SUCCESSFUL`，失败发生在 **对构建层做文件系统快照** 时：`/root/.kotlin/daemon` 下文件被 Kotlin 进程删掉，快照 `lstat` 不到。
+
+**默认 `Dockerfile`（与本地 `docker compose --build` 一致）** 仅做温和缓解，避免影响本机构建：
+
+- **`COPY gradle.properties`**，其中 **`kotlin.compiler.execution.strategy=in-process`**，减轻独立 Kotlin daemon。
+
+**若云端 Kaniko 仍失败**：不要用「改 `HOME` / 快照前 `rm`」等与本地 Docker 行为差异大的技巧（易让本机 `compose build` 异常）。请改用 **§6.3 `Dockerfile.fast`**：在 **本机或 CI** 执行 `.\gradlew.bat bootJar -x test`，再在云端/流水线里 **`docker build -f Dockerfile.fast`**（仅复制 JAR），或让平台直接部署已推好的、在别处构建的镜像。
+
+**排查**：若云端日志里 **`COPY` 仍没有 `gradle.properties`**，说明远端未拉到最新 `Dockerfile`，需检查分支与推送。
+
 ### 6.3 加快构建：本机先打 JAR，再用 Dockerfile.fast
 
 与 **§3「想快」** 相同思路：先在宿主机生成 **`build/libs/*.jar`**，再用 **`Dockerfile.fast`** 只做复制，适合频繁发版。
