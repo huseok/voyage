@@ -36,3 +36,13 @@ data class ProductView(
     val price: BigDecimal?,
     val currency: String?
 )
+
+/**
+ * 分页商品列表（前台 / 管理端列表共用结构）。
+ */
+data class PagedProducts(
+    val items: List<ProductView>,
+    val total: Long,
+    val page: Int,
+    val size: Int
+)

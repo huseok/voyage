@@ -1,9 +1,13 @@
 package com.trioForce.voyage.product
 
 import com.trioForce.voyage.common.BizException
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
+import org.springframework.data.jpa.domain.Specification
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.OffsetDateTime
+import java.util.Locale
 
 /**
  * 商品服务：
@@ -14,64 +18,66 @@ class ProductService(
     private val productRepository: ProductRepository
 ) {
     /**
-     * 查询前台商品列表。
-     *
-     * @param loggedIn 是否已登录，用于控制价格字段返回
-     * @return 商品列表
+     * 前台分页列表：仅上架；支持国家与关键词（标题、SKU、ID）。
      */
-    fun listPublic(loggedIn: Boolean): List<ProductView> {
-        return productRepository.findAllByIsActiveTrue().map {
-            ProductView(
-                id = it.id!!,
-                title = it.title,
-                moq = it.moq,
-                description = it.description,
-                skuCode = it.skuCode,
-                hsCode = it.hsCode,
-                unit = it.unit,
-                incoterm = it.incoterm,
-                originCountry = it.originCountry,
-                leadTimeDays = it.leadTimeDays,
-                isActive = it.isActive,
-                price = if (loggedIn) it.price else null,
-                currency = if (loggedIn) it.currency else null
-            )
-        }
-    }
-
-    /**
-     * 查询前台商品详情。
-     *
-     * @param id 商品 ID
-     * @param loggedIn 是否已登录
-     * @return 商品详情
-     */
-    fun detailPublic(id: Long, loggedIn: Boolean): ProductView {
-        val it = productRepository.findById(id).orElseThrow { BizException("product not found") }
-        if (!it.isActive) throw BizException("product not found")
-        return ProductView(
-            id = it.id!!,
-            title = it.title,
-            moq = it.moq,
-            description = it.description,
-            skuCode = it.skuCode,
-            hsCode = it.hsCode,
-            unit = it.unit,
-            incoterm = it.incoterm,
-            originCountry = it.originCountry,
-            leadTimeDays = it.leadTimeDays,
-            isActive = it.isActive,
-            price = if (loggedIn) it.price else null,
-            currency = if (loggedIn) it.currency else null
+    fun listPublicPage(
+        page: Int,
+        size: Int,
+        country: String?,
+        q: String?,
+        loggedIn: Boolean
+    ): PagedProducts {
+        val pageable = PageRequest.of(clampPage(page), clampSize(size), Sort.by(Sort.Direction.DESC, "id"))
+        var spec: Specification<ProductEntity> = Specification.where(onlyActiveSpec())
+        countrySpec(country)?.let { spec = spec.and(it) }
+        querySpec(q)?.let { spec = spec.and(it) }
+        val result = productRepository.findAll(spec, pageable)
+        return PagedProducts(
+            items = result.content.map { toProductView(it, loggedIn) },
+            total = result.totalElements,
+            page = result.number,
+            size = result.size
         )
     }
 
     /**
-     * 后台创建商品。
+     * 管理端分页列表：含下架商品；可选上架筛选与关键词。
      *
-     * @param req 商品参数
-     * @return 新商品 ID
+     * @param activeFilter null 表示全部，true/false 表示仅上架/仅下架
      */
+    fun listAdminPage(page: Int, size: Int, q: String?, activeFilter: Boolean?): PagedProducts {
+        val pageable = PageRequest.of(clampPage(page), clampSize(size), Sort.by(Sort.Direction.DESC, "id"))
+        var spec: Specification<ProductEntity> = Specification.where(Specification { _, _, cb -> cb.conjunction() })
+        activeFilter?.let { active ->
+            spec = spec.and { root, _, cb -> cb.equal(root.get<Boolean>("isActive"), active) }
+        }
+        querySpec(q)?.let { spec = spec.and(it) }
+        val result = productRepository.findAll(spec, pageable)
+        return PagedProducts(
+            items = result.content.map { toProductView(it, loggedIn = true) },
+            total = result.totalElements,
+            page = result.number,
+            size = result.size
+        )
+    }
+
+    /**
+     * 管理端详情：含下架商品，始终返回价格。
+     */
+    fun adminDetail(id: Long): ProductView {
+        val entity = productRepository.findById(id).orElseThrow { BizException("product not found") }
+        return toProductView(entity, loggedIn = true)
+    }
+
+    /**
+     * 查询前台商品详情（仅上架）。
+     */
+    fun detailPublic(id: Long, loggedIn: Boolean): ProductView {
+        val it = productRepository.findById(id).orElseThrow { BizException("product not found") }
+        if (!it.isActive) throw BizException("product not found")
+        return toProductView(it, loggedIn)
+    }
+
     @Transactional
     fun create(req: ProductAdminUpsertRequest): Long {
         val now = OffsetDateTime.now()
@@ -96,12 +102,6 @@ class ProductService(
         return entity.id!!
     }
 
-    /**
-     * 后台更新商品。
-     *
-     * @param id 商品 ID
-     * @param req 商品参数
-     */
     @Transactional
     fun update(id: Long, req: ProductAdminUpsertRequest) {
         val entity = productRepository.findById(id).orElseThrow { BizException("product not found") }
@@ -120,4 +120,50 @@ class ProductService(
         entity.updatedAt = OffsetDateTime.now()
         productRepository.save(entity)
     }
+
+    private fun toProductView(it: ProductEntity, loggedIn: Boolean): ProductView =
+        ProductView(
+            id = it.id!!,
+            title = it.title,
+            moq = it.moq,
+            description = it.description,
+            skuCode = it.skuCode,
+            hsCode = it.hsCode,
+            unit = it.unit,
+            incoterm = it.incoterm,
+            originCountry = it.originCountry,
+            leadTimeDays = it.leadTimeDays,
+            isActive = it.isActive,
+            price = if (loggedIn) it.price else null,
+            currency = if (loggedIn) it.currency else null
+        )
+
+    private fun onlyActiveSpec(): Specification<ProductEntity> =
+        Specification { root, _, cb -> cb.isTrue(root.get("isActive")) }
+
+    private fun countrySpec(country: String?): Specification<ProductEntity>? {
+        if (country.isNullOrBlank()) return null
+        val c = country.trim().lowercase(Locale.ROOT)
+        return Specification { root, _, cb ->
+            cb.equal(cb.lower(root.get("originCountry")), c)
+        }
+    }
+
+    private fun querySpec(q: String?): Specification<ProductEntity>? {
+        if (q.isNullOrBlank()) return null
+        val term = q.trim()
+        val lowered = term.lowercase(Locale.ROOT)
+        val like = "%$lowered%"
+        val idLong = runCatching { term.toLong() }.getOrNull()
+        return Specification { root, _, cb ->
+            val title = cb.like(cb.lower(root.get("title")), like)
+            val sku = cb.like(cb.lower(cb.coalesce(root.get("skuCode"), "")), like)
+            val idMatch = idLong?.let { cb.equal(root.get<Long>("id"), it) } ?: cb.disjunction()
+            cb.or(title, sku, idMatch)
+        }
+    }
+
+    private fun clampPage(page: Int): Int = page.coerceAtLeast(0)
+
+    private fun clampSize(size: Int): Int = size.coerceIn(1, 100)
 }

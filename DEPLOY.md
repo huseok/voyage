@@ -209,4 +209,92 @@ Get-Content $envFile | ForEach-Object {
 
 ## 5. 部署到云主机 / PaaS
 
-与 Docker 相同：在平台里配置 **与 §2 同名** 的环境变量；不必把含密码的 `.env` 提交到 Git。
+与 Docker 相同：在平台里配置 **与 §2 同名** 的环境变量；不必把含密码的 `.env` 提交到 Git。  
+**若使用 ClawCloud Run 等「按镜像部署」的平台，请直接看 §6：准备镜像、推送仓库、在控制台创建应用。**
+
+---
+
+## 6. 准备镜像与发布（Docker Hub → ClawCloud Run 等）
+
+本节说明：**在 `voyage` 根目录用 Dockerfile 构建镜像 → 推到可公网拉取的镜像仓库 → 在 PaaS 填镜像名与环境变量**。以下命令以 **PowerShell** 为例；**cmd** 可把 `cd` 换成 `cd /d`。
+
+### 6.1 前置条件
+
+- 已安装 **Docker Desktop**（或等价 Docker 引擎），且 **`docker version`** 客户端与服务端均正常。
+- 已注册 **Docker Hub**（或 **GHCR** 等）账号；**镜像名中的命名空间必须是你在该平台上拥有推送权限的名字**（例如 `zhangsan/voyage-api`，不能随意占用他人命名空间）。
+
+### 6.2 本地构建镜像（标准 Dockerfile）
+
+在 **`voyage` 根目录**（与 **`Dockerfile`**、**`gradlew`** 同级）执行：
+
+```powershell
+cd <本仓库>\voyage
+docker build -t <你的DockerHub用户名>/voyage-api:<版本标签> .
+```
+
+示例（仅说明格式，请替换用户名与标签）：
+
+```powershell
+cd e:\workspace\globuy\voyage
+docker build -t zhangsan/voyage-api:1.0.0 .
+```
+
+- **首次构建**或清缓存后，镜像内会执行 **`./gradlew bootJar`**，常见 **5～20 分钟**；再次构建会命中 BuildKit / Gradle 缓存，通常明显变快。
+- 构建成功后，可查看本地镜像：
+
+```powershell
+docker images <你的DockerHub用户名>/voyage-api --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.ID}}"
+```
+
+### 6.3 加快构建：本机先打 JAR，再用 Dockerfile.fast
+
+与 **§3「想快」** 相同思路：先在宿主机生成 **`build/libs/*.jar`**，再用 **`Dockerfile.fast`** 只做复制，适合频繁发版。
+
+```powershell
+cd <本仓库>\voyage
+.\gradlew.bat bootJar -x test
+docker build -f Dockerfile.fast -t <你的DockerHub用户名>/voyage-api:<版本标签> .
+```
+
+### 6.4 登录镜像仓库并推送
+
+推送前需 **`docker login`**（Docker Hub 默认 `docker.io`）：
+
+```powershell
+docker login
+docker push <你的DockerHub用户名>/voyage-api:<版本标签>
+```
+
+推送完成后，在 **ClawCloud Run**（或其它平台）的「镜像」一栏填写完整镜像引用，例如：
+
+- `docker.io/<你的DockerHub用户名>/voyage-api:1.0.0`（以平台提示为准，有的只填 `<用户名>/voyage-api:1.0.0`）。
+
+**勿将**含仓库密码的脚本或 **`.env`** 提交到 Git；CI 里用 **Secret** 注入 `DOCKER_PASSWORD` 等。
+
+### 6.5 在 ClawCloud Run 上创建应用（概要）
+
+官方文档：**[Deploy from Docker](https://docs.run.claw.cloud/clawcloud-run/getting-started/deploy-from-docker)**。控制台入口：**[ClawCloud Run](https://run.claw.cloud/)** → **App Launchpad** → **Create App**。
+
+建议配置要点：
+
+| 项 | 建议值 |
+|----|--------|
+| 镜像 | 上一步 **`docker push`** 后的镜像名与标签 |
+| 容器端口 | **8080**（与 `Dockerfile` / Spring 默认一致） |
+| 公网访问 | 开启，否则浏览器无法访问 API |
+| 环境变量 | 与 **§2** 一致：`SPRING_PROFILES_ACTIVE=cloud`（连远端库）、`SPRING_DATASOURCE_*`、`JWT_SECRET`、**`APP_CORS_ALLOWED_ORIGINS`**（必须包含**线上前端**完整 Origin，英文逗号分隔；若仍本地联调可追加 `http://localhost:5173`） |
+
+数据库仍使用 **外部 PostgreSQL**（如 Supabase Pooler）；镜像内默认不自带生产库。应用启动时会执行 **Flyway 迁移**。
+
+### 6.6 与前端联调
+
+将前端 **`VITE_API_BASE_URL`**（或项目中等价变量）设为 Claw 分配给你的 **API 根地址**（`https://...`，是否带尾斜杠按前端 `apiClient` 约定）。
+
+### 6.7 仅本地自测镜像（不推送）
+
+```powershell
+cd <本仓库>\voyage
+docker build -t voyage-api:local .
+```
+
+运行仍需 **§2** 中的环境变量与可连上的数据库；可直接用 **§3** 的 `docker compose` 带 `--env-file`，或 `docker run -e SPRING_DATASOURCE_PASSWORD=... -e ... -p 8080:8080 voyage-api:local`（自行补全变量，勿在聊天中泄露真实密码）。

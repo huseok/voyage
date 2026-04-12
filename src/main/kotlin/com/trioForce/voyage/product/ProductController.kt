@@ -17,31 +17,61 @@ class ProductController(
     private val productService: ProductService
 ) {
     /**
-     * 前台商品列表。
+     * 前台分页商品列表（仅上架）。
      *
-     * @param authentication 当前认证信息，用于判断是否登录
-     * @return 商品列表（未登录不返回价格）
+     * @param page 页码，从 0 开始
+     * @param size 每页条数，最大 100
+     * @param country 可选，按原产国精确匹配（不区分大小写）
+     * @param q 可选，标题 / SKU / ID 模糊或精确匹配
      */
     @GetMapping("/api/v1/products")
-    fun list(authentication: Authentication?): ApiResponse<List<ProductView>> =
-        ok(productService.listPublic(authentication?.isAuthenticated == true))
+    fun list(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(required = false) country: String?,
+        @RequestParam(required = false) q: String?,
+        authentication: Authentication?
+    ): ApiResponse<PagedProducts> =
+        ok(
+            productService.listPublicPage(
+                page,
+                size,
+                country,
+                q,
+                authentication?.isAuthenticated == true
+            )
+        )
 
     /**
-     * 前台商品详情。
-     *
-     * @param id 商品 ID
-     * @param authentication 当前认证信息
-     * @return 商品详情（未登录不返回价格）
+     * 前台商品详情（仅上架）。
      */
     @GetMapping("/api/v1/products/{id}")
     fun detail(@PathVariable id: Long, authentication: Authentication?): ApiResponse<ProductView> =
         ok(productService.detailPublic(id, authentication?.isAuthenticated == true))
 
     /**
-     * 后台创建商品。
+     * 管理端分页商品列表（含下架）。
      *
-     * @param req 商品参数
-     * @return 新商品 ID
+     * @param active 可选：`true` 仅上架、`false` 仅下架；不传则全部
+     */
+    @GetMapping("/api/v1/admin/products")
+    fun listAdmin(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "10") size: Int,
+        @RequestParam(required = false) q: String?,
+        @RequestParam(required = false) active: String?
+    ): ApiResponse<PagedProducts> =
+        ok(productService.listAdminPage(page, size, q, parseActiveFilter(active)))
+
+    /**
+     * 管理端商品详情（含下架），用于编辑页加载。
+     */
+    @GetMapping("/api/v1/admin/products/{id}")
+    fun adminDetail(@PathVariable id: Long): ApiResponse<ProductView> =
+        ok(productService.adminDetail(id))
+
+    /**
+     * 后台创建商品。
      */
     @PostMapping("/api/v1/admin/products")
     fun create(@Valid @RequestBody req: ProductAdminUpsertRequest): ApiResponse<Map<String, Long>> =
@@ -49,14 +79,19 @@ class ProductController(
 
     /**
      * 后台更新商品。
-     *
-     * @param id 商品 ID
-     * @param req 商品参数
-     * @return 更新结果
      */
     @PutMapping("/api/v1/admin/products/{id}")
     fun update(@PathVariable id: Long, @Valid @RequestBody req: ProductAdminUpsertRequest): ApiResponse<String> {
         productService.update(id, req)
         return ok("updated")
+    }
+
+    private fun parseActiveFilter(raw: String?): Boolean? {
+        if (raw.isNullOrBlank()) return null
+        return when (raw.trim().lowercase()) {
+            "true", "1", "yes" -> true
+            "false", "0", "no" -> false
+            else -> null
+        }
     }
 }
