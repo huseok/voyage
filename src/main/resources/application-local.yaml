@@ -1,0 +1,9 @@
+# profile=local：本机 Postgres（含「仅起 db 容器 + 宿主机 Gradle」时连 localhost:5432）。
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/voyage_db}
+    username: ${SPRING_DATASOURCE_USERNAME:voyage_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:change_me}
+  flyway:
+    baseline-on-migrate: false
+    baseline-version: "0"

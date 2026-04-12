@@ -22,5 +22,14 @@ data class ChangePasswordRequest(
     @field:NotBlank @field:Size(min = 6, max = 64) val newPassword: String
 )
 
-data class LoginResponse(val token: String)
+data class LoginResponse(
+    val accessToken: String,
+    val refreshToken: String,
+    /** Access token 剩余有效时间（秒），供前端调度刷新 */
+    val expiresIn: Long
+)
+
+data class RefreshTokenRequest(
+    @field:NotBlank val refreshToken: String
+)
 data class MeResponse(val id: Long, val email: String, val name: String, val role: String)

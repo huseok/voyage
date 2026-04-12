@@ -23,7 +23,7 @@ class JwtAuthFilter(
         }
 
         val token = authHeader.substring(7)
-        val claims = runCatching { jwtService.parseClaims(token) }.getOrNull()
+        val claims = jwtService.parseAccessTokenClaims(token)
         if (claims == null) {
             filterChain.doFilter(request, response)
             return

@@ -14,5 +14,6 @@ app:
   jwt:
     secret: test-jwt-secret-must-be-long-enough-for-hs256-algorithm
     access-token-minutes: 120
+    refresh-token-days: 14
   cors:
     allowed-origins: http://localhost:5173

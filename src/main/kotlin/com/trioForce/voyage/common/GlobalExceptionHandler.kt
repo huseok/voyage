@@ -1,10 +1,12 @@
 package com.trioForce.voyage.common
 
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.server.ResponseStatusException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -17,5 +19,13 @@ class GlobalExceptionHandler {
     fun handleValidationException(ex: MethodArgumentNotValidException): ApiResponse<Nothing> {
         val firstError = ex.bindingResult.fieldErrors.firstOrNull()?.defaultMessage ?: "validation failed"
         return ApiResponse(code = 400, message = firstError)
+    }
+
+    @ExceptionHandler(ResponseStatusException::class)
+    fun handleResponseStatus(ex: ResponseStatusException): ResponseEntity<ApiResponse<Nothing>> {
+        val status = ex.statusCode.value()
+        return ResponseEntity
+            .status(ex.statusCode)
+            .body(ApiResponse(code = status, message = ex.reason ?: "error", data = null))
     }
 }

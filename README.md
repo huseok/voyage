@@ -1,6 +1,6 @@
 # Voyage（Globuy 后端）
 
-Kotlin + Spring Boot。**主路径**：远端 PostgreSQL + **Docker**；**可选**：本机 **`gradlew bootRun`** 直连同一远端库（见 **`DEPLOY.md` §4**）。同仓库前端：**`../foreign-trade-shop/`**。
+Kotlin + Spring Boot。**主路径**：远端 PostgreSQL + **Docker**；**可选**：本机 Postgres（Docker **`--profile local-db`**，见 **`DEPLOY.md` §3.1**）或本机 **`gradlew bootRun`**（见 **`DEPLOY.md` §4**）。同仓库前端：**`../foreign-trade-shop/`**。
 
 ---
 
@@ -25,6 +25,8 @@ docker compose --env-file .env.render.local up -d --build
 ```
 
 若改用默认 **`.env`**，则 **`docker compose up -d --build`** 即可。
+
+**本机 Postgres（Docker）**：见 **`DEPLOY.md` §3.1**（`--profile local-db` + **`.env.docker.local`**）。
 
 **本机 Gradle（可选）** — `bootRun` 不自动读 env 文件，用 IDE 或 PowerShell 注入变量后再 **`.\gradlew.bat bootRun`**，见 **`DEPLOY.md` §4**。
 

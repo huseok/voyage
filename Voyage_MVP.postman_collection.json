@@ -60,8 +60,8 @@
                   "  pm.response.to.have.status(200);",
                   "});",
                   "const json = pm.response.json();",
-                  "if (json && json.data && json.data.token) {",
-                  "  pm.collectionVariables.set('token', json.data.token);",
+                  "if (json && json.data && json.data.accessToken) {",
+                  "  pm.collectionVariables.set('token', json.data.accessToken);",
                   "}"
                 ]
               }

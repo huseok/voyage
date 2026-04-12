@@ -7,7 +7,9 @@ import com.trioForce.voyage.user.UserEntity
 import com.trioForce.voyage.user.UserRepository
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import org.springframework.http.HttpStatus
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.server.ResponseStatusException
 import java.time.OffsetDateTime
 
 /**
@@ -49,8 +51,38 @@ class AuthService(
         val user = userRepository.findByEmail(req.email.trim().lowercase()).orElseThrow { BizException("invalid email or password") }
         if (!passwordEncoder.matches(req.password, user.passwordHash)) throw BizException("invalid email or password")
         if (user.status != "ACTIVE") throw BizException("user disabled")
-        val token = jwtService.generateToken(user.id!!, user.email, user.role)
-        return LoginResponse(token)
+        val access = jwtService.generateAccessToken(user.id!!, user.email, user.role)
+        val refresh = jwtService.generateRefreshToken(user.id!!)
+        return LoginResponse(
+            accessToken = access,
+            refreshToken = refresh,
+            expiresIn = jwtService.accessTokenTtlSeconds()
+        )
+    }
+
+    /**
+     * 用 refresh token 轮换签发新的 access + refresh（refresh 旋转）。
+     * 失败时返回 401，由前端清空态并引导重新登录。
+     */
+    fun refresh(req: RefreshTokenRequest): LoginResponse {
+        val claims =
+            try {
+                jwtService.parseRefreshTokenClaims(req.refreshToken.trim())
+            } catch (_: Exception) {
+                throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid refresh token")
+            }
+        val userId =
+            claims.subject.toLongOrNull()
+                ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid refresh token")
+        val user = userRepository.findById(userId).orElseThrow { ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid refresh token") }
+        if (user.status != "ACTIVE") throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "user disabled")
+        val access = jwtService.generateAccessToken(user.id!!, user.email, user.role)
+        val refresh = jwtService.generateRefreshToken(user.id!!)
+        return LoginResponse(
+            accessToken = access,
+            refreshToken = refresh,
+            expiresIn = jwtService.accessTokenTtlSeconds()
+        )
     }
 
     /**

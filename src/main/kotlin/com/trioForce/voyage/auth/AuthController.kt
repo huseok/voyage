@@ -38,6 +38,12 @@ class AuthController(
     fun login(@Valid @RequestBody req: LoginRequest): ApiResponse<LoginResponse> = ok(authService.login(req))
 
     /**
+     * 用 refresh token 换取新的 access + refresh（旋转 refresh）。
+     */
+    @PostMapping("/refresh")
+    fun refresh(@Valid @RequestBody req: RefreshTokenRequest): ApiResponse<LoginResponse> = ok(authService.refresh(req))
+
+    /**
      * 修改密码接口。
      *
      * @param req 修改密码参数（旧密码、新密码）

@@ -1,4 +1,4 @@
-# 公共 Spring 配置；默认 profile 为 cloud，数据源见 application-cloud.yaml。
+# 公共 Spring 配置；默认 cloud；本地库见 application-local.yaml（由 SPRING_PROFILES_ACTIVE=local 激活）。
 server:
   port: 8080
 
@@ -35,7 +35,9 @@ logging:
 app:
   jwt:
     secret: ${JWT_SECRET:change_me_to_a_long_secret_for_prod}
-    access-token-minutes: 120
+    # Access：短期；Refresh：长期，到期后须重新登录
+    access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:15}
+    refresh-token-days: ${JWT_REFRESH_TOKEN_DAYS:14}
   cors:
     # 多个域名用英文逗号分隔；生产环境请替换为正式前端域名
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174}

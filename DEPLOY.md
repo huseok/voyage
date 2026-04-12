@@ -1,8 +1,8 @@
-# Voyage：远端数据库 + Docker
+# Voyage：Docker 运行后端
 
-主路径：**容器内 Spring** + **远端 PostgreSQL**。默认 profile 与数据源占位见 **`application.yaml`**、**`application-cloud.yaml`**。
+默认：**容器内 Spring** + **远端 PostgreSQL**（`SPRING_PROFILES_ACTIVE` 默认 **`cloud`**，见 **`application-cloud.yaml`**）。
 
-**可选**：本机 **`gradlew bootRun`**，见 **§5**。
+**可选**：**本机 Postgres 跑在 Docker**（`--profile local-db` + 专用 env 文件），见 **§3.1**。本机 **`gradlew bootRun`** 见 **§4**。
 
 ---
 
@@ -10,8 +10,9 @@
 
 | 文件 | 说明 |
 |------|------|
-| **`application-cloud.yaml`** | 默认 JDBC / 用户名等；密码等仍由容器环境变量覆盖。 |
-| **`docker-compose.yml`** | 在 `environment` 里写 Spring 所需项；`${变量名}` 由 Compose 在启动时替换（见 §3：默认 `.env` 或 **`--env-file .env.render.local`**）。 |
+| **`application-cloud.yaml`** | **profile=cloud**：远端库默认 JDBC / 用户名等。 |
+| **`application-local.yaml`** | **profile=local**：默认连 **`localhost:5432`** 的 `voyage_db`（本机只起 `db` 容器 + Gradle 时用）。 |
+| **`docker-compose.yml`** | 默认只起 API；加 **`--profile local-db`** 时起内置 Postgres；变量用 **`--env-file`** 或 `.env` 注入（见 §3）。 |
 
 ---
 
@@ -19,10 +20,12 @@
 
 | 变量 | 说明 |
 |------|------|
-| **`SPRING_PROFILES_ACTIVE`** | 固定 **`cloud`**（已在 compose 里写死）。 |
+| **`SPRING_PROFILES_ACTIVE`** | 默认 **`cloud`**；本地 Docker 库时设为 **`local`**（与 **`application-local.yaml`** 一致）。 |
 | **`SPRING_DATASOURCE_PASSWORD`** | Compose 占位符 **`${SPRING_DATASOURCE_PASSWORD}`**（与 **`.env.render.local` / Render** 同名）。**必须非空**，否则应用起不来。 |
 | **`SPRING_DATASOURCE_URL`** / **`USERNAME`** | 可选；compose 里带有默认值，可用 shell / `.env` 整串覆盖。 |
 | **`JWT_SECRET`** | 建议生产改为长随机串；compose 带默认值。 |
+| **`JWT_ACCESS_TOKEN_MINUTES`**（可选） | Access JWT 有效期，默认 **15** 分钟；到期前前端会静默 refresh。 |
+| **`JWT_REFRESH_TOKEN_DAYS`**（可选） | Refresh JWT 最长有效天数，默认 **14**；到期后须重新登录。 |
 | **`APP_CORS_ALLOWED_ORIGINS`** | 浏览器 **Origin** 白名单，**英文逗号分隔、不要空格**。本机 Vite 常见：`http://localhost:5173`（若只用 `.env.render.local` 配了线上 Vercel，**务必把 localhost 一并写上**，否则本地登录会 CORS 预检失败）。未设时 compose 默认带 5173/5174。 |
 
 密码未进容器时，日志里常见：  
@@ -32,10 +35,39 @@
 
 ## 3. Docker Compose：正确启动命令
 
-**要点**：`docker-compose.yml` 里的 **`${SPRING_DATASOURCE_PASSWORD}`**、**`${JWT_SECRET}`** 等，由 Compose 在解析文件时替换，来源优先级为：**当前 shell 环境变量** → **你用 `--env-file` 指定的文件** → **同目录默认文件 `.env`**（若存在）。  
-与 **`.env.render.local`** 里变量名一致时，直接用下面 **方式 A** 即可。
+**要点**：`docker-compose.yml` 里的 **`${SPRING_DATASOURCE_PASSWORD}`**、**`${JWT_SECRET}`** 等，由 Compose 在解析文件时替换，来源优先级为：**当前 shell 环境变量** → **`--env-file`** → **同目录 `.env`**（若存在）。
 
-### 方式 A：使用 `.env.render.local`（推荐，与 Render 清单一致）
+### 3.1 本地 Postgres（Docker 里的 `db` + API 同网）
+
+1. 在 **`voyage` 根目录** 新建 **`.env.docker.local`**（可提交到 Git；若含与生产不同的密码，仍建议勿把生产密钥写进此文件）。内容示例（**密码与 `POSTGRES_PASSWORD` 必须一致**）：
+
+```env
+SPRING_PROFILES_ACTIVE=local
+SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/voyage_db
+SPRING_DATASOURCE_USERNAME=voyage_user
+SPRING_DATASOURCE_PASSWORD=change_me
+POSTGRES_PASSWORD=change_me
+JWT_SECRET=change_me_to_a_long_secret_for_prod
+```
+
+2. 启动（**必须**带 **`--profile local-db`** 与同一 **`--env-file`**）：
+
+```powershell
+cd <本仓库>\voyage
+docker compose --profile local-db --env-file .env.docker.local up -d --build
+```
+
+3. 停止并删掉 compose 内 Postgres 数据卷（慎用）：
+
+```powershell
+docker compose --profile local-db --env-file .env.docker.local down -v
+```
+
+不设 **`--profile local-db`** 时不会起 **`db`** 容器，行为与原先「仅远端库」一致。
+
+**只起 `db`、应用在宿主机用 Gradle**：先 `docker compose --profile local-db --env-file .env.docker.local up -d db`，再在终端设 **`SPRING_PROFILES_ACTIVE=local`**（数据源走 **`application-local.yaml`** 默认的 **`localhost:5432`**；库用户密码与 **`POSTGRES_PASSWORD` / `SPRING_DATASOURCE_PASSWORD`** 与 `.env.docker.local` 里一致即可）。
+
+### 方式 A：使用 `.env.render.local`（远端库，与 Render 清单一致）
 
 在 **`voyage` 根目录** 执行（**每一行**都带上 **`--env-file .env.render.local`**，Compose 才会用你的文件做 **`${...}` 替换**）：
 
@@ -56,7 +88,7 @@ docker compose --env-file .env.render.local logs -f voyage-api
 docker compose --env-file .env.render.local down
 ```
 
-你的 **`.env.render.local`** 里已有 **`SPRING_DATASOURCE_PASSWORD`**、**`JWT_SECRET`**、**`APP_CORS_ALLOWED_ORIGINS`** 时，会覆盖 compose 里对应项的占位符；**`SPRING_PROFILES_ACTIVE`** 在 compose 里已写死为 **`cloud`**，与文件里一致即可。
+你的 **`.env.render.local`** 里已有 **`SPRING_DATASOURCE_PASSWORD`** 等时，会覆盖 compose 默认值；**`SPRING_PROFILES_ACTIVE`** 可不写（默认 **`cloud`**）或显式写 **`cloud`**。
 
 ### 方式 A2：使用默认 `.env`
 
@@ -151,9 +183,12 @@ docker compose --env-file .env.render.local down --remove-orphans
 
 ---
 
-## 4. 可选：本机 Gradle + 远端库（`bootRun`）
+## 4. 可选：本机 Gradle（`bootRun`）
 
 **`gradlew bootRun` 不会自动读取** 仓库里的 `.env` / `.env.render.local`。请用 **IDE 的 EnvFile / Run Configuration**，或先在终端里把变量写进当前进程再启动。
+
+- **连远端库**：`SPRING_PROFILES_ACTIVE=cloud` + 云库密码等（与 **§3 方式 A** 相同变量名）。  
+- **连本机 Docker 里的 Postgres**：先按 **§3.1** 只起 **`db`**，再 **`SPRING_PROFILES_ACTIVE=local`**（默认 **`localhost:5432/voyage_db`**）。
 
 **PowerShell 示例**（从 `.env.render.local` 或 `.env` 读入 `KEY=VALUE` 行）：
 
