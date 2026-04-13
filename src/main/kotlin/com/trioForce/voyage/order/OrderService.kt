@@ -1,5 +1,7 @@
 package com.trioForce.voyage.order
 
+import com.trioForce.voyage.audit.OrderStatusHistoryEntity
+import com.trioForce.voyage.audit.OrderStatusHistoryRepository
 import com.trioForce.voyage.cart.CartItemRepository
 import com.trioForce.voyage.common.BizException
 import com.trioForce.voyage.product.ProductRepository
@@ -21,7 +23,8 @@ class OrderService(
     private val orderRepository: OrderRepository,
     private val orderItemRepository: OrderItemRepository,
     private val cartItemRepository: CartItemRepository,
-    private val productRepository: ProductRepository
+    private val productRepository: ProductRepository,
+    private val orderStatusHistoryRepository: OrderStatusHistoryRepository
 ) {
     /**
      * 从购物车创建订单，并清空购物车。
@@ -67,6 +70,8 @@ class OrderService(
                 updatedAt = now
             )
         )
+        // 记录初始状态，便于后台追踪订单生命周期。
+        appendStatusHistory(order.id!!, null, "PENDING_PAYMENT", "create order")
 
         orderItemRepository.saveAll(
             snapshots.map {
@@ -126,12 +131,14 @@ class OrderService(
     fun adminUpdateTracking(orderNo: String, req: UpdateTrackingRequest) {
         val order = orderRepository.findByOrderNo(orderNo).orElseThrow { BizException("order not found") }
         if (order.status != "PAID" && order.status != "SHIPPED") throw BizException("only paid/shipped order can set tracking")
+        val fromStatus = order.status
         order.trackingNo = req.trackingNo.trim()
         order.logisticsCompany = req.logisticsCompany?.trim()
         // 录入运单号后自动切到 SHIPPED，减少后台手工步骤
         order.status = "SHIPPED"
         order.updatedAt = OffsetDateTime.now()
         orderRepository.save(order)
+        appendStatusHistory(order.id!!, fromStatus, "SHIPPED", "update tracking")
     }
 
     /**
@@ -145,9 +152,11 @@ class OrderService(
         val order = orderRepository.findByOrderNo(orderNo).orElseThrow { BizException("order not found") }
         val next = status.trim().uppercase()
         validateTransition(order.status, next)
+        val fromStatus = order.status
         order.status = next
         order.updatedAt = OffsetDateTime.now()
         orderRepository.save(order)
+        appendStatusHistory(order.id!!, fromStatus, next, "admin update status")
     }
 
     /**
@@ -161,9 +170,24 @@ class OrderService(
         val order = orderRepository.findByOrderNo(orderNo).orElseThrow { BizException("order not found") }
         if (order.userId != userId) throw BizException("forbidden order")
         if (order.status != "DELIVERED" && order.status != "SHIPPED") throw BizException("order cannot be completed now")
+        val fromStatus = order.status
         order.status = "COMPLETED"
         order.updatedAt = OffsetDateTime.now()
         orderRepository.save(order)
+        appendStatusHistory(order.id!!, fromStatus, "COMPLETED", "confirm completed")
+    }
+
+    private fun appendStatusHistory(orderId: Long, from: String?, to: String, remark: String) {
+        orderStatusHistoryRepository.save(
+            OrderStatusHistoryEntity(
+                orderId = orderId,
+                fromStatus = from,
+                toStatus = to,
+                changedBy = runCatching { CurrentUser.userId() }.getOrNull(),
+                changedAt = OffsetDateTime.now(),
+                remark = remark
+            )
+        )
     }
 
     private fun toView(order: OrderEntity): OrderView {

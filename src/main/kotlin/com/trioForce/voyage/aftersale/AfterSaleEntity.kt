@@ -1,10 +1,12 @@
 package com.trioForce.voyage.aftersale
 
 import jakarta.persistence.*
+import org.hibernate.annotations.Where
 import java.time.OffsetDateTime
 
 @Entity
 @Table(name = "t_after_sales")
+@Where(clause = "is_deleted = false")
 class AfterSaleEntity(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -26,5 +28,20 @@ class AfterSaleEntity(
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
 
     @Column(name = "updated_at", nullable = false)
-    var updatedAt: OffsetDateTime = OffsetDateTime.now()
+    var updatedAt: OffsetDateTime = OffsetDateTime.now(),
+
+    @Column(name = "created_by")
+    var createdBy: Long? = null,
+
+    @Column(name = "updated_by")
+    var updatedBy: Long? = null,
+
+    @Column(name = "is_deleted", nullable = false)
+    var isDeleted: Boolean = false,
+
+    @Column(name = "deleted_by")
+    var deletedBy: Long? = null,
+
+    @Column(name = "deleted_at")
+    var deletedAt: OffsetDateTime? = null
 )

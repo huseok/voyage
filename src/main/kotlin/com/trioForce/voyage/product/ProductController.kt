@@ -86,6 +86,28 @@ class ProductController(
         return ok("updated")
     }
 
+    /**
+     * 后台批量上下架。
+     */
+    @PatchMapping("/api/v1/admin/products/bulk-status")
+    fun bulkStatus(@Valid @RequestBody req: ProductBulkStatusRequest): ApiResponse<Map<String, Int>> =
+        ok(mapOf("updated" to productService.bulkUpdateStatus(req.ids, req.isActive)))
+
+    /**
+     * 后台获取商品 SKU 规格矩阵。
+     */
+    @GetMapping("/api/v1/admin/products/{id}/sku-matrix")
+    fun getSkuMatrix(@PathVariable id: Long): ApiResponse<ProductSkuMatrixView> = ok(productService.getSkuMatrix(id))
+
+    /**
+     * 后台保存商品 SKU 规格矩阵（全量覆盖）。
+     */
+    @PutMapping("/api/v1/admin/products/{id}/sku-matrix")
+    fun upsertSkuMatrix(@PathVariable id: Long, @Valid @RequestBody req: ProductSkuMatrixUpsertRequest): ApiResponse<String> {
+        productService.upsertSkuMatrix(id, req)
+        return ok("updated")
+    }
+
     private fun parseActiveFilter(raw: String?): Boolean? {
         if (raw.isNullOrBlank()) return null
         return when (raw.trim().lowercase()) {

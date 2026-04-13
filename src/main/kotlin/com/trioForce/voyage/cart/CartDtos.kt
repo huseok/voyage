@@ -15,6 +15,7 @@ data class CartItemView(
     val itemId: Long,
     val productId: Long,
     val title: String,
+    val moq: Int,
     val quantity: Int,
     val unitPrice: String,
     val currency: String,

@@ -1,11 +1,13 @@
 package com.trioForce.voyage.order
 
 import jakarta.persistence.*
+import org.hibernate.annotations.Where
 import java.math.BigDecimal
 import java.time.OffsetDateTime
 
 @Entity
 @Table(name = "t_order_items")
+@Where(clause = "is_deleted = false")
 class OrderItemEntity(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -27,5 +29,23 @@ class OrderItemEntity(
     var quantity: Int,
 
     @Column(name = "created_at", nullable = false)
-    var createdAt: OffsetDateTime = OffsetDateTime.now()
+    var createdAt: OffsetDateTime = OffsetDateTime.now(),
+
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: OffsetDateTime = OffsetDateTime.now(),
+
+    @Column(name = "created_by")
+    var createdBy: Long? = null,
+
+    @Column(name = "updated_by")
+    var updatedBy: Long? = null,
+
+    @Column(name = "is_deleted", nullable = false)
+    var isDeleted: Boolean = false,
+
+    @Column(name = "deleted_by")
+    var deletedBy: Long? = null,
+
+    @Column(name = "deleted_at")
+    var deletedAt: OffsetDateTime? = null
 )

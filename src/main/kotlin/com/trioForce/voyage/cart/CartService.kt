@@ -38,6 +38,7 @@ class CartService(
                 itemId = row.id!!,
                 productId = row.productId,
                 title = product.title,
+                moq = product.moq,
                 quantity = row.quantity,
                 unitPrice = product.price.toPlainString(),
                 currency = product.currency,
@@ -90,6 +91,8 @@ class CartService(
         val userId = CurrentUser.userId()
         val item = cartItemRepository.findById(itemId).orElseThrow { BizException("cart item not found") }
         if (item.userId != userId) throw BizException("forbidden cart item")
+        val product = productRepository.findById(item.productId).orElseThrow { BizException("product not found") }
+        if (req.quantity < product.moq) throw BizException("quantity must >= moq ${product.moq}")
         item.quantity = req.quantity
         item.updatedAt = OffsetDateTime.now()
         cartItemRepository.save(item)

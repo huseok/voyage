@@ -41,3 +41,6 @@ app:
   cors:
     # 多个域名用英文逗号分隔；生产环境请替换为正式前端域名
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174}
+  hikari:
+      maximum-pool-size: ${SPRING_DATASOURCE_MAX_POOL_SIZE:3}
+      minimum-idle: ${SPRING_DATASOURCE_MIN_IDLE:1}
