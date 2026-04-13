@@ -4,6 +4,7 @@ import com.trioForce.voyage.audit.OrderStatusHistoryEntity
 import com.trioForce.voyage.audit.OrderStatusHistoryRepository
 import com.trioForce.voyage.cart.CartItemRepository
 import com.trioForce.voyage.common.BizException
+import com.trioForce.voyage.dictionary.DictionaryService
 import com.trioForce.voyage.product.ProductRepository
 import com.trioForce.voyage.security.CurrentUser
 import org.springframework.data.domain.Sort
@@ -24,7 +25,8 @@ class OrderService(
     private val orderItemRepository: OrderItemRepository,
     private val cartItemRepository: CartItemRepository,
     private val productRepository: ProductRepository,
-    private val orderStatusHistoryRepository: OrderStatusHistoryRepository
+    private val orderStatusHistoryRepository: OrderStatusHistoryRepository,
+    private val dictionaryService: DictionaryService
 ) {
     /**
      * 从购物车创建订单，并清空购物车。
@@ -148,15 +150,33 @@ class OrderService(
      * @param status 目标状态
      */
     @Transactional
-    fun adminUpdateStatus(orderNo: String, status: String) {
+    fun adminUpdateStatus(orderNo: String, status: String, remark: String? = null) {
         val order = orderRepository.findByOrderNo(orderNo).orElseThrow { BizException("order not found") }
         val next = status.trim().uppercase()
-        validateTransition(order.status, next)
+        validateTransition(order.status, next, allowSkip = true)
         val fromStatus = order.status
         order.status = next
         order.updatedAt = OffsetDateTime.now()
         orderRepository.save(order)
-        appendStatusHistory(order.id!!, fromStatus, next, "admin update status")
+        appendStatusHistory(order.id!!, fromStatus, next, remark?.trim().takeUnless { it.isNullOrBlank() } ?: "admin update status")
+    }
+
+    /**
+     * 后台自动流转到下一状态（按字典 ORDER_STATUS 排序）。
+     */
+    @Transactional
+    fun adminFlowNextStatus(orderNo: String, remark: String? = null) {
+        val order = orderRepository.findByOrderNo(orderNo).orElseThrow { BizException("order not found") }
+        val chain = getConfiguredOrderStatuses()
+        val currentIdx = chain.indexOf(order.status)
+        if (currentIdx < 0) throw BizException("current status not configured in ORDER_STATUS: ${order.status}")
+        if (currentIdx >= chain.lastIndex) throw BizException("already at final status")
+        val next = chain[currentIdx + 1]
+        val fromStatus = order.status
+        order.status = next
+        order.updatedAt = OffsetDateTime.now()
+        orderRepository.save(order)
+        appendStatusHistory(order.id!!, fromStatus, next, remark?.trim().takeUnless { it.isNullOrBlank() } ?: "flow next")
     }
 
     /**
@@ -219,17 +239,25 @@ class OrderService(
         )
     }
 
-    private fun validateTransition(current: String, next: String) {
-        val allowed = mapOf(
-            "PENDING_PAYMENT" to setOf("PAID"),
-            "PAID" to setOf("SHIPPED"),
-            "SHIPPED" to setOf("DELIVERED"),
-            "DELIVERED" to setOf("COMPLETED"),
-            "COMPLETED" to emptySet()
-        )
-        if (!(allowed[current]?.contains(next) == true)) {
-            throw BizException("invalid status transition: $current -> $next")
+    private fun validateTransition(current: String, next: String, allowSkip: Boolean) {
+        val chain = getConfiguredOrderStatuses()
+        val currentIdx = chain.indexOf(current)
+        val nextIdx = chain.indexOf(next)
+        if (currentIdx < 0 || nextIdx < 0) {
+            throw BizException("status not configured in ORDER_STATUS")
         }
+        if (nextIdx <= currentIdx) {
+            throw BizException("status cannot rollback or keep same: $current -> $next")
+        }
+        if (!allowSkip && nextIdx != currentIdx + 1) {
+            throw BizException("status must flow to next step: $current -> $next")
+        }
+    }
+
+    private fun getConfiguredOrderStatuses(): List<String> {
+        val items = dictionaryService.listItems("ORDER_STATUS")
+        if (items.isEmpty()) throw BizException("ORDER_STATUS dictionary is empty")
+        return items.sortedBy { it.sortNo }.map { it.itemCode.uppercase() }
     }
 
     private fun generateOrderNo(): String {

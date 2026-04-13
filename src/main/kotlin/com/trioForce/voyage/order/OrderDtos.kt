@@ -20,7 +20,12 @@ data class UpdateTrackingRequest(
 )
 
 data class UpdateOrderStatusRequest(
-    @field:NotBlank val status: String
+    @field:NotBlank val status: String,
+    val remark: String? = null
+)
+
+data class FlowNextOrderStatusRequest(
+    val remark: String? = null
 )
 
 data class ConfirmDeliveredRequest(

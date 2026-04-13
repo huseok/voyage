@@ -86,7 +86,16 @@ class OrderController(
      */
     @PatchMapping("/api/v1/admin/orders/{orderNo}/status")
     fun updateStatus(@PathVariable orderNo: String, @Valid @RequestBody req: UpdateOrderStatusRequest): ApiResponse<String> {
-        orderService.adminUpdateStatus(orderNo, req.status)
+        orderService.adminUpdateStatus(orderNo, req.status, req.remark)
         return ok("status updated")
+    }
+
+    /**
+     * 后台按字典顺序自动流转到下一状态。
+     */
+    @PatchMapping("/api/v1/admin/orders/{orderNo}/status/flow-next")
+    fun flowNextStatus(@PathVariable orderNo: String, @RequestBody req: FlowNextOrderStatusRequest): ApiResponse<String> {
+        orderService.adminFlowNextStatus(orderNo, req.remark)
+        return ok("status flow-next updated")
     }
 }
