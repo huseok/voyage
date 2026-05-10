@@ -2,6 +2,8 @@
 
 Kotlin + Spring Boot。**主路径**：远端 PostgreSQL + **Docker**；**可选**：本机 Postgres（Docker **`--profile local-db`**，见 **`DEPLOY.md` §3.1**）或本机 **`gradlew bootRun`**（见 **`DEPLOY.md` §4**）。同仓库前端：**`../foreign-trade-shop/`**。
 
+阿里云单机（Ubuntu、固定数据目录、Nginx 同域反代）：见仓库根目录 **`deploy/aliyun/README.md`**。远端库连接串请用环境变量注入（**`application-cloud.yaml`** 已与示例 Supabase 默认值脱钩）。
+
 ---
 
 ## 本地联调地址（Docker 映射默认端口时）
@@ -50,5 +52,8 @@ docker compose --env-file .env.render.local up -d --build
 |------|------|
 | **`DEPLOY.md`** | 环境变量、Docker、可选 `bootRun`、云上部署 |
 | **`../foreign-trade-shop/INTEGRATION.md`** | 前端 `VITE_API_BASE_URL` 与接口说明 |
+| **`../GLOBUY_ROLLOUT_AND_TODO.md`** | 媒体上传、商品图、设计稿落地进度与待办 |
+
+**本地媒体**：上传写入 `voyage.media.storage-root`（默认 `./data/media`），公开访问路径为 `/media/...`（见仓库根目录 rollout 文档）。
 
 代码：`src/main/kotlin`；迁移：`src/main/resources/db/migration/`。

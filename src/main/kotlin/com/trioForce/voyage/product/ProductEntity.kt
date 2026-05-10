@@ -23,6 +23,10 @@ class ProductEntity(
     @Column(nullable = false, precision = 12, scale = 2)
     var price: BigDecimal,
 
+    /** 划线原价；非空且大于 [price] 时前台可作为「活动价」展示 */
+    @Column(name = "list_price", precision = 12, scale = 2)
+    var listPrice: BigDecimal? = null,
+
     @Column(nullable = false, length = 8)
     var currency: String = "USD",
 

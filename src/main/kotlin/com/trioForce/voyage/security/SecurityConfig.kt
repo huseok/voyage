@@ -30,8 +30,12 @@ class SecurityConfig(
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests {
                 // 登录注册、公开商品、文档接口允许匿名访问
-                it.requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
+                it.requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/captcha").permitAll()
                 it.requestMatchers("/api/v1/products/**").permitAll()
+                it.requestMatchers("/api/v1/tags").permitAll()
+                it.requestMatchers("/api/v1/site/contents", "/api/v1/site/promos").permitAll()
+                it.requestMatchers("/api/v1/storefront/settings").permitAll()
+                it.requestMatchers("/media/**").permitAll()
                 it.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 // 后台接口必须 ADMIN 角色
                 it.requestMatchers("/api/v1/admin/**").hasRole("ADMIN")

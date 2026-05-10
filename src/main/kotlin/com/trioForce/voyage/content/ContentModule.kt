@@ -159,6 +159,15 @@ class ContentService(
     fun listActiveContents(): List<SiteContentView> =
         siteContentRepository.findAllByIsActiveTrueOrderBySortNoAscIdAsc().map(::toContentView)
 
+    /**
+     * 首页活动轮播：`content_type = PROMO`（大小写不敏感），按 sort_no、id 排序。
+     * 每条对应一叶：推荐填 `image_url`（`/media/...`）、`title` / `subtitle` / `body`、`action_url`（站内路径或外链）。
+     */
+    fun listActivePromos(): List<SiteContentView> =
+        siteContentRepository.findAllByIsActiveTrueOrderBySortNoAscIdAsc()
+            .filter { it.contentType.equals("PROMO", ignoreCase = true) }
+            .map(::toContentView)
+
     /** 后台读取内容（当前简化为全量）。 */
     fun listAllContents(): List<SiteContentView> = siteContentRepository.findAll().map(::toContentView)
 
@@ -234,6 +243,10 @@ class ContentController(private val contentService: ContentService) {
     /** 前台：读取站点内容。 */
     @GetMapping("/api/v1/site/contents")
     fun listSiteContents(): ApiResponse<List<SiteContentView>> = ok(contentService.listActiveContents())
+
+    /** 前台：首页活动轮播（仅 PROMO 类型）。 */
+    @GetMapping("/api/v1/site/promos")
+    fun listSitePromos(): ApiResponse<List<SiteContentView>> = ok(contentService.listActivePromos())
 
     /** 后台：读取所有站点内容。 */
     @GetMapping("/api/v1/admin/site/contents")

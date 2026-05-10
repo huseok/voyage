@@ -4,7 +4,6 @@ import com.trioForce.voyage.common.ApiResponse
 import com.trioForce.voyage.common.ok
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
-import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
 /**
@@ -23,6 +22,9 @@ class ProductController(
      * @param size 每页条数，最大 100
      * @param country 可选，按原产国精确匹配（不区分大小写）
      * @param q 可选，标题 / SKU / ID 模糊或精确匹配
+     * @param categoryId 可选，按后台分类 ID 精确筛选（与 Header 类目横条联动）
+     * @param tagId 可选，按标签 ID 筛选（商品须关联该标签；仅上架）
+     * @param promo `true` 时仅返回「活动商品」：已设置划线价且划线价高于主档售价
      */
     @GetMapping("/api/v1/products")
     fun list(
@@ -30,7 +32,9 @@ class ProductController(
         @RequestParam(defaultValue = "20") size: Int,
         @RequestParam(required = false) country: String?,
         @RequestParam(required = false) q: String?,
-        authentication: Authentication?
+        @RequestParam(required = false) categoryId: Long?,
+        @RequestParam(required = false) tagId: Long?,
+        @RequestParam(required = false) promo: Boolean?,
     ): ApiResponse<PagedProducts> =
         ok(
             productService.listPublicPage(
@@ -38,7 +42,9 @@ class ProductController(
                 size,
                 country,
                 q,
-                authentication?.isAuthenticated == true
+                categoryId,
+                tagId,
+                promo == true,
             )
         )
 
@@ -46,8 +52,8 @@ class ProductController(
      * 前台商品详情（仅上架）。
      */
     @GetMapping("/api/v1/products/{id}")
-    fun detail(@PathVariable id: Long, authentication: Authentication?): ApiResponse<ProductView> =
-        ok(productService.detailPublic(id, authentication?.isAuthenticated == true))
+    fun detail(@PathVariable id: Long): ApiResponse<ProductView> =
+        ok(productService.detailPublic(id))
 
     /**
      * 管理端分页商品列表（含下架）。
