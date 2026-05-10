@@ -1,5 +1,7 @@
 # 阿里云 Ubuntu 单机部署（文档在后端仓库 `voyage/deploy/aliyun`）
 
+**分步命令说明（推荐打印 / 收藏）：** [`DEPLOY_STEP_BY_STEP.md`](./DEPLOY_STEP_BY_STEP.md)
+
 假设：**后端**与**前端**是两个独立 Git 仓库；服务器上放在同一父目录下即可。
 
 ## 目录约定
@@ -18,7 +20,9 @@
 cd /opt/globuy/repo/voyage
 cp deploy/aliyun/env.backend.example /opt/globuy/config/env.backend
 nano /opt/globuy/config/env.backend   # 密码、JWT、CORS（含 http://公网IP）
-docker compose -f deploy/aliyun/docker-compose.stack.yml --env-file /opt/globuy/config/env.backend up -d --build
+chmod 600 /opt/globuy/config/env.backend
+unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD
+DOCKER_BUILDKIT=0 docker-compose -f deploy/aliyun/docker-compose.stack.yml --env-file /opt/globuy/config/env.backend up -d --build
 ```
 
 验证：`curl -sS http://127.0.0.1:8080/api/v1/tags | head`

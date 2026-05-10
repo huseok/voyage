@@ -11,7 +11,8 @@ RUN chmod +x gradlew
 COPY src/ src/
 
 # 不用 BuildKit --mount，兼容未装 docker-buildx 的轻量云主机（重复构建会稍慢）
-RUN ./gradlew bootJar -x test --no-daemon --stacktrace
+# --console=plain：远程 docker build 时 Gradle 持续输出任务行，不易误以为卡住
+RUN ./gradlew bootJar -x test --no-daemon --stacktrace --console=plain
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
