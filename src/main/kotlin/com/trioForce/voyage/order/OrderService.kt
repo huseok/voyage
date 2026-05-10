@@ -260,9 +260,23 @@ class OrderService(
         return items.sortedBy { it.sortNo }.map { it.itemCode.uppercase() }
     }
 
+    /**
+     * 订单号：`GB-{yyMMdd}-{HHmmss}-{ssssss}`
+     * - `yyMMdd`：下单日（公历）
+     * - `HHmmss`：时分秒
+     * - 末段 6 位随机数，同日同时段可读；冲突时重试生成
+     */
     private fun generateOrderNo(): String {
-        val ts = OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
-        val random = ThreadLocalRandom.current().nextInt(1000, 9999)
-        return "VOY$ts$random"
+        val now = OffsetDateTime.now()
+        val date = now.format(DateTimeFormatter.ofPattern("yyMMdd"))
+        val time = now.format(DateTimeFormatter.ofPattern("HHmmss"))
+        repeat(16) {
+            val seq = ThreadLocalRandom.current().nextInt(0, 1_000_000)
+            val candidate = String.format("GB-%s-%s-%06d", date, time, seq)
+            if (!orderRepository.existsByOrderNo(candidate)) return candidate
+        }
+        val fallback = String.format("GB-%s-%s-%09d", date, time, System.nanoTime() % 1_000_000_000L)
+        if (!orderRepository.existsByOrderNo(fallback)) return fallback
+        return String.format("GB-%s-%s-%s", date, time, java.util.UUID.randomUUID().toString().replace("-", "").take(12).uppercase())
     }
 }

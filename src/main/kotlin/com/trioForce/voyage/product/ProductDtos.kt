@@ -1,13 +1,26 @@
 package com.trioForce.voyage.product
 
+import com.trioForce.voyage.tag.TagView
 import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import java.math.BigDecimal
 
+data class ProductImageView(
+    val thumbUrl: String,
+    val fullUrl: String,
+)
+
+data class ProductImageRef(
+    val thumbUrl: String,
+    val fullUrl: String,
+)
+
 data class ProductAdminUpsertRequest(
     @field:NotBlank val title: String,
     @field:DecimalMin("0.01") val price: BigDecimal,
+    /** 划线原价；须 ≥ [price]；null 表示清空划线价 */
+    @field:DecimalMin("0.01") val listPrice: BigDecimal? = null,
     @field:NotBlank val currency: String,
     @field:Min(1) val moq: Int,
     val description: String? = null,
@@ -20,7 +33,11 @@ data class ProductAdminUpsertRequest(
     @field:DecimalMin("0.0") val weightKg: BigDecimal? = null,
     val categoryId: Long? = null,
     val shippingTemplateId: Long? = null,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    /** null：不改图片；[]：清空；非空：覆盖排序 */
+    val images: List<ProductImageRef>? = null,
+    /** null：不改标签关联；[]：清空；非空：覆盖为指定标签 id 集合 */
+    val tagIds: List<Long>? = null,
 )
 
 data class ProductView(
@@ -40,8 +57,14 @@ data class ProductView(
     val isActive: Boolean,
     val options: List<ProductOptionView> = emptyList(),
     val skus: List<ProductSkuView> = emptyList(),
-    // 未登录时该字段为 null，用于前端控制“登录后看价格”
+    /** 前台列表优先展示首张 thumbUrl */
+    val images: List<ProductImageView> = emptyList(),
+    /** 商品标签（来自 t_product_tags + t_tags） */
+    val tags: List<TagView> = emptyList(),
+    /** 主档单价（活动/现价）；前台接口亦返回（不要求登录） */
     val price: BigDecimal?,
+    /** 划线原价；非空且大于 [price] 时可供促销展示 */
+    val listPrice: BigDecimal?,
     val currency: String?
 )
 

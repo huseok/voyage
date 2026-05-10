@@ -1,0 +1,19 @@
+# profile=aliyun：机器上自建 / 云主机部署时的运维向默认（日志、SQL 打印等）。
+# 激活方式（与其它 profile 叠加）：
+#   - 远端库：SPRING_PROFILES_ACTIVE=cloud,aliyun
+#   - 本机/Compose Postgres：SPRING_PROFILES_ACTIVE=local,aliyun
+#
+# 媒体目录仍由 voyage.media.storage-root / 环境变量 VOYAGE_MEDIA_STORAGE_ROOT 控制（勿写死）。
+spring:
+  config:
+    activate:
+      on-profile: aliyun
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    root: info
+    com.trioForce.voyage: info
+    org.hibernate.SQL: warn
+    org.hibernate.orm.jdbc.bind: warn

@@ -1,0 +1,47 @@
+# 在后端仓库根目录执行（即本文件的上两级）：
+#   cd /opt/globuy/repo/voyage
+#   docker compose -f deploy/aliyun/docker-compose.stack.yml --env-file /opt/globuy/config/env.backend up -d --build
+#
+# build context：相对本 compose 文件所在目录，`../..` = voyage 仓库根（Dockerfile 所在目录）
+
+services:
+  db:
+    image: postgres:16
+    container_name: globuy-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: voyage_db
+      POSTGRES_USER: ${SPRING_DATASOURCE_USERNAME:-voyage_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - /opt/globuy/data/postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${SPRING_DATASOURCE_USERNAME:-voyage_user} -d voyage_db']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  voyage-api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: globuy-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local,aliyun}
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://db:5432/voyage_db}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-voyage_user}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost}
+      VOYAGE_MEDIA_STORAGE_ROOT: ${VOYAGE_MEDIA_STORAGE_ROOT:-/data/media}
+      VOYAGE_STOREFRONT_HOME_PROMO_ZONE_TAG_CODE: ${VOYAGE_STOREFRONT_HOME_PROMO_ZONE_TAG_CODE:-HOME_PROMO}
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    volumes:
+      - /opt/globuy/data/media:/data/media

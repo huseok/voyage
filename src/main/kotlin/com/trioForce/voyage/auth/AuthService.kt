@@ -20,7 +20,8 @@ import java.time.OffsetDateTime
 class AuthService(
     private val userRepository: UserRepository,
     private val passwordEncoder: PasswordEncoder,
-    private val jwtService: JwtService
+    private val jwtService: JwtService,
+    private val captchaService: CaptchaService,
 ) {
     /**
      * 创建新用户账号。
@@ -29,6 +30,9 @@ class AuthService(
      */
     @Transactional
     fun register(req: RegisterRequest) {
+        if (!captchaService.validateAndConsume(req.captchaId, req.captchaCode)) {
+            throw BizException("invalid captcha")
+        }
         if (userRepository.findByEmail(req.email).isPresent) throw BizException("email already exists")
         userRepository.save(
             UserEntity(

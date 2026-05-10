@@ -14,8 +14,13 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/v1/auth")
 @Tag(name = "Auth", description = "注册、登录与当前用户")
 class AuthController(
-    private val authService: AuthService
+    private val authService: AuthService,
+    private val captchaService: CaptchaService,
 ) {
+    /** 获取注册用图形验证码（PNG Base64 + captchaId）。 */
+    @GetMapping("/captcha")
+    fun captcha(): ApiResponse<CaptchaResponse> = ok(captchaService.create())
+
     /**
      * 用户注册接口。
      *

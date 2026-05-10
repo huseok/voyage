@@ -6,6 +6,12 @@ spring:
   application:
     name: voyage
 
+  servlet:
+    multipart:
+      # 须大于 voyage.media.max-upload-bytes，预留 multipart 封装开销
+      max-file-size: 15MB
+      max-request-size: 15MB
+
   profiles:
     default: cloud
 
@@ -31,6 +37,21 @@ logging:
     com.trioForce.voyage: debug
     org.springframework.web: info
     org.hibernate.SQL: debug
+
+voyage:
+  storefront:
+    # 首页活动商品轮播使用的标签编码（覆盖环境变量 VOYAGE_STOREFRONT_HOME_PROMO_ZONE_TAG_CODE）
+    home-promo-zone-tag-code: ${VOYAGE_STOREFRONT_HOME_PROMO_ZONE_TAG_CODE:HOME_PROMO}
+  media:
+    # 上传文件落盘目录（生产请改为绝对路径并确保进程可写）
+    storage-root: ${VOYAGE_MEDIA_STORAGE_ROOT:./data/media}
+    max-upload-bytes: ${VOYAGE_MEDIA_MAX_UPLOAD_BYTES:10485760}
+    thumbnail-max-width: ${VOYAGE_MEDIA_THUMB_MAX_W:400}
+    thumbnail-max-height: ${VOYAGE_MEDIA_THUMB_MAX_H:400}
+    # scaled：完整图按下列上限缩放；original：完整图保存原始字节
+    full-variant: ${VOYAGE_MEDIA_FULL_VARIANT:scaled}
+    full-max-width: ${VOYAGE_MEDIA_FULL_MAX_W:1600}
+    full-max-height: ${VOYAGE_MEDIA_FULL_MAX_H:1600}
 
 app:
   jwt:

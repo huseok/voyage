@@ -30,6 +30,9 @@ dependencies {
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.16")
+	implementation("net.coobird:thumbnailator:0.4.20")
+	/** 图形验证码：https://github.com/whvcse/EasyCaptcha （MIT） */
+	implementation("com.github.whvcse:easy-captcha:1.6.2")
 	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
 	runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
 	developmentOnly("org.springframework.boot:spring-boot-devtools")

@@ -6,4 +6,5 @@ import java.util.Optional
 interface OrderRepository : JpaRepository<OrderEntity, Long> {
     fun findAllByUserIdOrderByIdDesc(userId: Long): List<OrderEntity>
     fun findByOrderNo(orderNo: String): Optional<OrderEntity>
+    fun existsByOrderNo(orderNo: String): Boolean
 }
