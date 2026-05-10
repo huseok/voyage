@@ -10,8 +10,8 @@ RUN chmod +x gradlew
 
 COPY src/ src/
 
-RUN --mount=type=cache,target=/home/gradle/.gradle \
-    ./gradlew bootJar -x test --no-daemon --stacktrace
+# 不用 BuildKit --mount，兼容未装 docker-buildx 的轻量云主机（重复构建会稍慢）
+RUN ./gradlew bootJar -x test --no-daemon --stacktrace
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
