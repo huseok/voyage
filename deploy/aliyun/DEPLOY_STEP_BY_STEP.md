@@ -5,8 +5,11 @@
 **日常重新发版**：在服务器上对 `release.sh` 赋可执行权限后直接执行即可（默认：前后端 `git pull`、前端 `npm ci && build` 并同步到 `/opt/globuy/www/frontend`、后端 **默认 quick**：宿主 `./gradlew bootJar` + `Dockerfile.fast` 再 `docker compose up -d --build`，需 **JDK 17+**；未装 JDK 请加 **`--backend-standard`**、最后 `nginx` reload）：
 
 ```bash
-chmod +x /opt/globuy/repo/voyage/deploy/aliyun/release.sh
-/opt/globuy/repo/voyage/deploy/aliyun/release.sh
+chmod +x /opt/globuy/repo/voyage/deploy/aliyun/release*.sh
+bash /opt/globuy/repo/voyage/deploy/aliyun/release.sh
+# 仅前端 / 仅后端（等价于 release.sh --frontend-only / --backend-only）：
+# bash …/release-frontend.sh
+# bash …/release-backend.sh
 ```
 
 选项与路径覆盖见 **`./deploy/aliyun/release.sh --help`**（含 `--no-pull`、`--frontend-only`、`--backend-only`、`--no-nginx`、**`--stop-api-first`**、**`--backend-standard`**（无 JDK 时用）、**`--backend-quick`**（与默认相同）、**`--backend-full`**（无缓存全量构建）及 `GLOBUY_ROOT` 等）。**首次装机**仍建议按下面步骤准备目录、`env.backend` 与 Nginx 站点配置。
