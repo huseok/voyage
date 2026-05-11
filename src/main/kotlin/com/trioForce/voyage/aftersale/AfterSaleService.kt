@@ -38,6 +38,23 @@ class AfterSaleService(
     }
 
     /**
+     * 后台代客发起售后：工单归属仍为下单用户（[AfterSaleEntity.userId] = 订单买家）。
+     */
+    @Transactional
+    fun adminCreate(req: CreateAfterSaleRequest) {
+        val order = orderRepository.findByOrderNo(req.orderNo.trim()).orElseThrow { BizException("order not found") }
+        afterSaleRepository.save(
+            AfterSaleEntity(
+                userId = order.userId,
+                orderNo = req.orderNo.trim(),
+                content = req.content.trim(),
+                createdAt = OffsetDateTime.now(),
+                updatedAt = OffsetDateTime.now()
+            )
+        )
+    }
+
+    /**
      * 查询当前登录用户的售后工单列表。
      *
      * @return 当前用户售后工单

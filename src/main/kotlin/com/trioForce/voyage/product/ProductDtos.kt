@@ -21,6 +21,8 @@ data class ProductAdminUpsertRequest(
     @field:DecimalMin("0.01") val price: BigDecimal,
     /** 划线原价；须 ≥ [price]；null 表示清空划线价 */
     @field:DecimalMin("0.01") val listPrice: BigDecimal? = null,
+    /** 成本价；可选；null 表示清空 */
+    @field:DecimalMin("0.0") val costPrice: BigDecimal? = null,
     @field:NotBlank val currency: String,
     @field:Min(1) val moq: Int,
     val description: String? = null,
@@ -65,6 +67,8 @@ data class ProductView(
     val price: BigDecimal?,
     /** 划线原价；非空且大于 [price] 时可供促销展示 */
     val listPrice: BigDecimal?,
+    /** 成本价；仅管理端接口返回，前台为 null */
+    val costPrice: BigDecimal? = null,
     val currency: String?
 )
 

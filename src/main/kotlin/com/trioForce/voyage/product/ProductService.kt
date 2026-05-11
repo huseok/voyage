@@ -65,6 +65,7 @@ class ProductService(
                     includeMatrix = false,
                     gallery = mediaByProduct[pid] ?: emptyList(),
                     tags = tagsByProduct[pid] ?: emptyList(),
+                    exposeCost = false,
                 )
             },
             total = result.totalElements,
@@ -78,12 +79,23 @@ class ProductService(
      *
      * @param activeFilter null 表示全部，true/false 表示仅上架/仅下架
      */
-    fun listAdminPage(page: Int, size: Int, q: String?, activeFilter: Boolean?): PagedProducts {
+    fun listAdminPage(
+        page: Int,
+        size: Int,
+        q: String?,
+        activeFilter: Boolean?,
+        categoryId: Long? = null,
+        tagId: Long? = null,
+        currency: String? = null,
+    ): PagedProducts {
         val pageable = PageRequest.of(clampPage(page), clampSize(size), Sort.by(Sort.Direction.DESC, "id"))
         var spec: Specification<ProductEntity> = Specification.where(Specification { _, _, cb -> cb.conjunction() })
         activeFilter?.let { active ->
             spec = spec.and { root, _, cb -> cb.equal(root.get<Boolean>("isActive"), active) }
         }
+        categorySpec(categoryId)?.let { spec = spec.and(it) }
+        tagSpec(tagId)?.let { spec = spec.and(it) }
+        adminCurrencySpec(currency)?.let { spec = spec.and(it) }
         querySpec(q)?.let { spec = spec.and(it) }
         val result = productRepository.findAll(spec, pageable)
         val ids = result.content.mapNotNull { it.id }
@@ -97,6 +109,7 @@ class ProductService(
                     includeMatrix = false,
                     gallery = mediaByProduct[pid] ?: emptyList(),
                     tags = tagsByProduct[pid] ?: emptyList(),
+                    exposeCost = true,
                 )
             },
             total = result.totalElements,
@@ -112,7 +125,7 @@ class ProductService(
         val entity = productRepository.findById(id).orElseThrow { BizException("product not found") }
         val pid = entity.id!!
         val tags = batchTagsByProductId(listOf(pid))[pid] ?: emptyList()
-        return toProductView(entity, includeMatrix = true, tags = tags)
+        return toProductView(entity, includeMatrix = true, tags = tags, exposeCost = true)
     }
 
     /**
@@ -123,7 +136,7 @@ class ProductService(
         if (!it.isActive) throw BizException("product not found")
         val pid = it.id!!
         val tags = batchTagsByProductId(listOf(pid))[pid] ?: emptyList()
-        return toProductView(it, includeMatrix = true, tags = tags)
+        return toProductView(it, includeMatrix = true, tags = tags, exposeCost = false)
     }
 
     @Transactional
@@ -133,6 +146,8 @@ class ProductService(
             ProductEntity(
                 title = req.title.trim(),
                 price = req.price,
+                listPrice = normalizeListPrice(req.listPrice, req.price),
+                costPrice = req.costPrice,
                 currency = req.currency.uppercase(),
                 moq = req.moq,
                 description = req.description?.trim(),
@@ -162,6 +177,7 @@ class ProductService(
         entity.title = req.title.trim()
         entity.price = req.price
         entity.listPrice = normalizeListPrice(req.listPrice, req.price)
+        entity.costPrice = req.costPrice
         entity.currency = req.currency.uppercase()
         entity.moq = req.moq
         entity.description = req.description?.trim()
@@ -375,6 +391,7 @@ class ProductService(
         includeMatrix: Boolean,
         gallery: List<ProductImageView>? = null,
         tags: List<TagView> = emptyList(),
+        exposeCost: Boolean = false,
     ): ProductView {
         val options = if (!includeMatrix) emptyList() else productOptionRepository.findAllByProductIdOrderBySortNoAscIdAsc(it.id!!).map {
             ProductOptionView(it.optionName, it.optionValue, it.sortNo)
@@ -407,6 +424,7 @@ class ProductService(
             tags = tags,
             price = it.price,
             listPrice = it.listPrice,
+            costPrice = if (exposeCost) it.costPrice else null,
             currency = it.currency
         )
     }
@@ -439,6 +457,13 @@ class ProductService(
     private fun categorySpec(categoryId: Long?): Specification<ProductEntity>? {
         if (categoryId == null) return null
         return Specification { root, _, cb -> cb.equal(root.get<Long>("categoryId"), categoryId) }
+    }
+
+    /** 管理端列表：币种精确匹配（忽略大小写） */
+    private fun adminCurrencySpec(currency: String?): Specification<ProductEntity>? {
+        if (currency.isNullOrBlank()) return null
+        val c = currency.trim().uppercase(Locale.ROOT)
+        return Specification { root, _, cb -> cb.equal(cb.upper(root.get("currency")), c) }
     }
 
     /** 关联表 [ProductTagEntity] 子查询：上架商品且绑定指定标签 */

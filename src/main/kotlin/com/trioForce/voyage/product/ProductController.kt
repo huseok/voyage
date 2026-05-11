@@ -65,9 +65,22 @@ class ProductController(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "10") size: Int,
         @RequestParam(required = false) q: String?,
-        @RequestParam(required = false) active: String?
+        @RequestParam(required = false) active: String?,
+        @RequestParam(required = false) categoryId: Long?,
+        @RequestParam(required = false) tagId: Long?,
+        @RequestParam(required = false) currency: String?,
     ): ApiResponse<PagedProducts> =
-        ok(productService.listAdminPage(page, size, q, parseActiveFilter(active)))
+        ok(
+            productService.listAdminPage(
+                page,
+                size,
+                q,
+                parseActiveFilter(active),
+                categoryId,
+                tagId,
+                currency,
+            )
+        )
 
     /**
      * 管理端商品详情（含下架），用于编辑页加载。

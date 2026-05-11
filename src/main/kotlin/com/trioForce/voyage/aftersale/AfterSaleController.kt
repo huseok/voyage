@@ -44,6 +44,15 @@ class AfterSaleController(
     fun listAll(): ApiResponse<List<AfterSaleView>> = ok(afterSaleService.listAll())
 
     /**
+     * 后台创建售后工单（无需买家本人登录；归属买家用户）。
+     */
+    @PostMapping("/api/v1/admin/after-sales")
+    fun adminCreate(@Valid @RequestBody req: CreateAfterSaleRequest): ApiResponse<String> {
+        afterSaleService.adminCreate(req)
+        return ok("created")
+    }
+
+    /**
      * 后台更新售后状态。
      *
      * @param id 工单 ID

@@ -27,6 +27,10 @@ class ProductEntity(
     @Column(name = "list_price", precision = 12, scale = 2)
     var listPrice: BigDecimal? = null,
 
+    /** 成本价；仅管理端可见与维护 */
+    @Column(name = "cost_price", precision = 12, scale = 2)
+    var costPrice: BigDecimal? = null,
+
     @Column(nullable = false, length = 8)
     var currency: String = "USD",
 

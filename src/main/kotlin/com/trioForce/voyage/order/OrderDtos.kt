@@ -39,6 +39,13 @@ data class OrderItemView(
     val quantity: Int
 )
 
+data class PagedOrders(
+    val items: List<OrderView>,
+    val total: Long,
+    val page: Int,
+    val size: Int,
+)
+
 data class OrderView(
     val orderNo: String,
     val status: String,

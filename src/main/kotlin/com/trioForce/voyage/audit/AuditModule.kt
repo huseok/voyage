@@ -13,10 +13,13 @@ import com.trioForce.voyage.common.ok
 import com.trioForce.voyage.order.OrderRepository
 import jakarta.persistence.*
 import org.hibernate.annotations.Where
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Service
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.time.OffsetDateTime
 
@@ -104,6 +107,13 @@ data class AuditLogView(
     val createdAt: OffsetDateTime
 )
 
+data class PagedAuditLogs(
+    val items: List<AuditLogView>,
+    val total: Long,
+    val page: Int,
+    val size: Int,
+)
+
 data class OrderStatusHistoryView(
     val id: Long,
     val orderId: Long,
@@ -124,6 +134,19 @@ class AuditService(
         AuditLogView(it.id!!, it.actorUserId, it.actorRole, it.actionCode, it.entityType, it.entityId, it.detailJson, it.createdAt)
     }
 
+    fun listAuditLogsPage(page: Int, size: Int): PagedAuditLogs {
+        val pageable = PageRequest.of(page.coerceAtLeast(0), size.coerceIn(1, 100), Sort.by(Sort.Direction.DESC, "id"))
+        val result = auditLogRepository.findAll(pageable)
+        return PagedAuditLogs(
+            items = result.content.map {
+                AuditLogView(it.id!!, it.actorUserId, it.actorRole, it.actionCode, it.entityType, it.entityId, it.detailJson, it.createdAt)
+            },
+            total = result.totalElements,
+            page = result.number,
+            size = result.size,
+        )
+    }
+
     fun listOrderHistories(orderId: Long): List<OrderStatusHistoryView> =
         orderStatusHistoryRepository.findAllByOrderIdOrderByChangedAtAsc(orderId).map {
             OrderStatusHistoryView(it.id!!, it.orderId, it.fromStatus, it.toStatus, it.changedBy, it.changedAt, it.remark)
@@ -138,9 +161,12 @@ class AuditService(
 
 @RestController
 class AuditController(private val auditService: AuditService) {
-    /** 后台：操作日志列表。 */
+    /** 后台：操作日志分页列表。 */
     @GetMapping("/api/v1/admin/audit/logs")
-    fun listAuditLogs(): ApiResponse<List<AuditLogView>> = ok(auditService.listAuditLogs())
+    fun listAuditLogs(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ApiResponse<PagedAuditLogs> = ok(auditService.listAuditLogsPage(page, size))
 
     /** 后台：订单状态流转历史。 */
     @GetMapping("/api/v1/admin/audit/orders/{orderId}/histories")

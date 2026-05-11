@@ -5,6 +5,7 @@ import com.trioForce.voyage.security.CurrentUser
 import com.trioForce.voyage.security.JwtService
 import com.trioForce.voyage.user.UserEntity
 import com.trioForce.voyage.user.UserRepository
+import org.slf4j.LoggerFactory
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.http.HttpStatus
@@ -15,6 +16,8 @@ import java.time.OffsetDateTime
 /**
  * 认证核心服务：
  * 负责注册、登录、改密、当前用户信息查询。
+ *
+ * **日志**：注册失败场景记录 WARN/DEBUG 级摘要，**不**输出密码与验证码明文。
  */
 @Service
 class AuthService(
@@ -23,6 +26,8 @@ class AuthService(
     private val jwtService: JwtService,
     private val captchaService: CaptchaService,
 ) {
+    private val log = LoggerFactory.getLogger(AuthService::class.java)
+
     /**
      * 创建新用户账号。
      *
@@ -31,6 +36,11 @@ class AuthService(
     @Transactional
     fun register(req: RegisterRequest) {
         if (!captchaService.validateAndConsume(req.captchaId, req.captchaCode)) {
+            // 详细原因已在 CaptchaService 中以 DEBUG 打出；此处仅业务层告警，便于聚合监控「注册被验证码拦住」的次数。
+            log.warn(
+                "用户注册被拒绝：图形验证码无效、过期或已使用（不记录邮箱与验证码明文） captchaIdLen={}",
+                req.captchaId.trim().length,
+            )
             throw BizException("invalid captcha")
         }
         if (userRepository.findByEmail(req.email).isPresent) throw BizException("email already exists")
@@ -43,6 +53,8 @@ class AuthService(
                 country = req.country?.trim()
             )
         )
+        // 成功路径仅记一条 INFO，避免输出完整邮箱（如需审计请依赖数据库或专用审计表）。
+        log.info("用户注册成功")
     }
 
     /**

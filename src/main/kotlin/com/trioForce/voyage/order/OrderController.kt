@@ -43,14 +43,20 @@ class OrderController(
     fun listMyOrders(): ApiResponse<List<OrderView>> = ok(orderService.listMyOrders())
 
     /**
-     * 后台查询全部订单（跨用户）。
+     * 后台分页查询订单（跨用户）。
      *
-     * 需 **ADMIN** 角色；用于管理端列表，按订单主键 id 倒序。
-     *
-     * @return 全部订单的视图列表
+     * @param phase 阶段：`ALL` 或不传=全部；`PENDING_PAYMENT`/`PAID`/`SHIPPED`/`DELIVERED`/`COMPLETED`/`CANCELLED`；
+     *   `FULFILLING`=待发货+配送中；`DONE`=已送达或已完成。
+     * @param status 若传则按精确状态覆盖 phase。
      */
     @GetMapping("/api/v1/admin/orders")
-    fun listAllForAdmin(): ApiResponse<List<OrderView>> = ok(orderService.listAllForAdmin())
+    fun listAllForAdmin(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+        @RequestParam(required = false) q: String?,
+        @RequestParam(required = false) status: String?,
+        @RequestParam(required = false) phase: String?,
+    ): ApiResponse<PagedOrders> = ok(orderService.listAdminPage(page, size, q, status, phase))
 
     /**
      * 用户确认完成订单（收货后）。

@@ -1,4 +1,4 @@
-# Voyage（CHZfobkey 后端）
+# Voyage（CHZautokeys 后端）
 
 Kotlin + Spring Boot。**主路径**：远端 PostgreSQL + **Docker**；**可选**：本机 Postgres（Docker **`--profile local-db`**，见 **`DEPLOY.md` §3.1**）或本机 **`gradlew bootRun`**（见 **`DEPLOY.md` §4**）。同仓库前端：**`../foreign-trade-shop/`**。
 

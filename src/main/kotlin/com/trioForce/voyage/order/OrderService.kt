@@ -7,7 +7,9 @@ import com.trioForce.voyage.common.BizException
 import com.trioForce.voyage.dictionary.DictionaryService
 import com.trioForce.voyage.product.ProductRepository
 import com.trioForce.voyage.security.CurrentUser
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
+import org.springframework.data.jpa.domain.Specification
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -124,6 +126,28 @@ class OrderService(
         orderRepository.findAll(Sort.by(Sort.Direction.DESC, "id")).map { toView(it) }
 
     /**
+     * 后台分页查询订单；可选关键字（订单号、收货人）、精确状态或阶段筛选（phase 与 status 同时传时以 status 为准）。
+     */
+    fun listAdminPage(page: Int, size: Int, q: String?, status: String?, phase: String?): PagedOrders {
+        val pageable = PageRequest.of(clampOrderPage(page), clampOrderSize(size), Sort.by(Sort.Direction.DESC, "id"))
+        var spec: Specification<OrderEntity> = Specification { _, _, cb -> cb.conjunction() }
+        keywordOrderSpec(q)?.let { spec = spec.and(it) }
+        val st = status?.trim()?.takeUnless { it.isBlank() }?.uppercase()
+        if (st != null) {
+            spec = spec.and { root, _, cb -> cb.equal(root.get<String>("status"), st) }
+        } else {
+            phaseOrderSpec(phase)?.let { spec = spec.and(it) }
+        }
+        val result = orderRepository.findAll(spec, pageable)
+        return PagedOrders(
+            items = result.content.map { toView(it) },
+            total = result.totalElements,
+            page = result.number,
+            size = result.size,
+        )
+    }
+
+    /**
      * 后台录入物流信息。
      *
      * @param orderNo 订单号
@@ -209,6 +233,43 @@ class OrderService(
             )
         )
     }
+
+    private fun keywordOrderSpec(q: String?): Specification<OrderEntity>? {
+        if (q.isNullOrBlank()) return null
+        val term = q.trim()
+        val like = "%${term.lowercase()}%"
+        return Specification { root, _, cb ->
+            cb.or(
+                cb.like(cb.lower(root.get("orderNo")), like),
+                cb.like(cb.lower(root.get("receiverName")), like),
+            )
+        }
+    }
+
+    private fun phaseOrderSpec(phase: String?): Specification<OrderEntity>? {
+        val p = phase?.trim()?.uppercase()?.takeUnless { it.isBlank() || it == "ALL" } ?: return null
+        return when (p) {
+            "PENDING_PAYMENT" -> orderStatusEquals("PENDING_PAYMENT")
+            "PAID" -> orderStatusEquals("PAID")
+            "SHIPPED" -> orderStatusEquals("SHIPPED")
+            "DELIVERED" -> orderStatusEquals("DELIVERED")
+            "COMPLETED" -> orderStatusEquals("COMPLETED")
+            "FULFILLING" -> orderStatusIn(listOf("PAID", "SHIPPED"))
+            "DONE" -> orderStatusIn(listOf("DELIVERED", "COMPLETED"))
+            "CANCELLED" -> orderStatusEquals("CANCELLED")
+            else -> null
+        }
+    }
+
+    private fun orderStatusEquals(status: String): Specification<OrderEntity> =
+        Specification { root, _, cb -> cb.equal(root.get<String>("status"), status) }
+
+    private fun orderStatusIn(statuses: List<String>): Specification<OrderEntity> =
+        Specification { root, _, cb -> root.get<String>("status").`in`(statuses) }
+
+    private fun clampOrderPage(page: Int): Int = page.coerceAtLeast(0)
+
+    private fun clampOrderSize(size: Int): Int = size.coerceIn(1, 100)
 
     private fun toView(order: OrderEntity): OrderView {
         val items = orderItemRepository.findAllByOrderId(order.id!!).map {

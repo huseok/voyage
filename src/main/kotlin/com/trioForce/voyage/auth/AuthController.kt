@@ -2,13 +2,17 @@ package com.trioForce.voyage.auth
 
 import com.trioForce.voyage.common.ApiResponse
 import com.trioForce.voyage.common.ok
+import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.slf4j.LoggerFactory
 import org.springframework.web.bind.annotation.*
 
 /**
  * 认证接口控制器：
  * 暴露注册、登录、改密和当前用户信息接口。
+ *
+ * **说明**：图形验证码的签发与校验日志见 [CaptchaService]、[AuthService]；本控制器保持瘦逻辑，仅在必要时打访问级日志。
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -17,9 +21,20 @@ class AuthController(
     private val authService: AuthService,
     private val captchaService: CaptchaService,
 ) {
-    /** 获取注册用图形验证码（PNG Base64 + captchaId）。 */
+    private val log = LoggerFactory.getLogger(AuthController::class.java)
+
+    /**
+     * 获取注册用图形验证码。
+     *
+     * 返回体中的 [CaptchaResponse.imageBase64] 为完整 data URI，可直接赋给前端 `<img src>`；
+     * [CaptchaResponse.captchaId] 须在提交注册时原样回传。具体生成与内存策略见 [CaptchaService.create]。
+     */
+    @Operation(summary = "获取注册图形验证码")
     @GetMapping("/captcha")
-    fun captcha(): ApiResponse<CaptchaResponse> = ok(captchaService.create())
+    fun captcha(): ApiResponse<CaptchaResponse> {
+        log.debug("HTTP GET /api/v1/auth/captcha")
+        return ok(captchaService.create())
+    }
 
     /**
      * 用户注册接口。

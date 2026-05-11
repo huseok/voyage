@@ -5,19 +5,30 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 
 data class CaptchaResponse(
-    /** 提交注册时原样回传 */
+    /** 会话标识：提交 [RegisterRequest] 时须与此处返回值完全一致（一次性消费，勿缓存跨页滥用）。 */
     val captchaId: String,
-    /** 含 `data:image/png;base64,` 前缀，可直接作 img src */
+    /**
+     * PNG 图片的 Base64 表示，且为 **完整 data URI**（形如 `data:image/png;base64,...`），
+     * 前端可直接 `<img src={imageBase64} />`。服务端生成逻辑见 [CaptchaService.create]（避免重复拼接前缀导致图片无法显示）。
+     */
     val imageBase64: String,
 )
 
+/**
+ * 用户自助注册请求体。
+ *
+ * **验证码**：`captchaId` / `captchaCode` 须与 [CaptchaResponse] 及用户所见图片一致；
+ * 服务端一次性校验见 [CaptchaService.validateAndConsume]（通过后该 `captchaId` 作废）。
+ */
 data class RegisterRequest(
     @field:Email @field:NotBlank val email: String,
     @field:NotBlank @field:Size(min = 6, max = 64) val password: String,
     @field:NotBlank val name: String,
     val phone: String? = null,
     val country: String? = null,
+    /** 与 `GET /api/v1/auth/captcha` 返回的 `captchaId` 完全一致。 */
     @field:NotBlank val captchaId: String,
+    /** 用户辨认的图片字符；与服务端比对时不区分大小写，**禁止**写入日志。 */
     @field:NotBlank val captchaCode: String,
 )
 
