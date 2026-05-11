@@ -1,0 +1,7 @@
+# 与 docker-compose.stack.yml 叠加使用（quick 模式）：
+#   docker compose -f deploy/aliyun/docker-compose.stack.yml -f deploy/aliyun/docker-compose.stack.quick.yml ...
+# 镜像仅用 Dockerfile.fast 复制宿主机构好的 build/libs/*.jar，不在容器内跑 Gradle。
+services:
+  voyage-api:
+    build:
+      dockerfile: Dockerfile.fast

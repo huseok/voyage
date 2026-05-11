@@ -2,7 +2,7 @@
 
 Kotlin + Spring Boot。**主路径**：远端 PostgreSQL + **Docker**；**可选**：本机 Postgres（Docker **`--profile local-db`**，见 **`DEPLOY.md` §3.1**）或本机 **`gradlew bootRun`**（见 **`DEPLOY.md` §4**）。同仓库前端：**`../foreign-trade-shop/`**。
 
-阿里云单机部署：**`deploy/aliyun/README.md`**（与本后端同仓库）。远端库连接串请用环境变量注入。
+阿里云单机部署：**`deploy/aliyun/README.md`**（手动命令速查）、**`deploy/aliyun/release.sh`**（一键发版）、**`deploy/aliyun/DEPLOY_STEP_BY_STEP.md`**（分步详解）。远端库连接串请用环境变量注入。
 
 ---
 

@@ -1,6 +1,6 @@
 # profile=cloud：远程 PostgreSQL。连接串与账号务必用环境变量注入，勿在仓库写死生产库。
 # 未设置环境变量时的占位默认指向本机 5432（便于与自建库对齐）；云上 RDS 请显式配置 SPRING_DATASOURCE_*。
-# 说明见 DEPLOY.md、本仓库 deploy/aliyun/README.md。
+# 说明见 DEPLOY.md、本仓库 deploy/aliyun/README.md、DEPLOY_STEP_BY_STEP.md。
 spring:
   datasource:
     # url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require&prepareThreshold=0&preferQueryMode=simple}
