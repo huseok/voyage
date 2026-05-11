@@ -15,6 +15,10 @@ bash /opt/globuy/repo/voyage/deploy/aliyun/release.sh
 # bash /opt/globuy/repo/voyage/deploy/publish-frontend.sh
 ```
 
+## 快捷命令（可选，仅服务器配置）
+
+不必每次输入 **`/opt/globuy/repo/voyage/...`** 全路径：在服务器上用软链接、`~/bin` 或别名即可（**不改仓库脚本**）。完整可复制命令见 **[`README.md`](./README.md)「快捷命令」**。
+
 选项与路径覆盖见 **`./deploy/aliyun/release.sh --help`**（含 `--no-pull`、`--frontend-only`、`--backend-only`、`--no-nginx`、**`--stop-api-first`**、**`--backend-standard`**（无 JDK 时用）、**`--backend-quick`**（与默认相同）、**`--backend-full`**（无缓存全量构建）及 `GLOBUY_ROOT` 等）。**首次装机**仍建议按下面步骤准备目录、`env.backend` 与 Nginx 站点配置。
 
 ---
@@ -269,6 +273,7 @@ sudo nginx -t && sudo systemctl reload nginx
 | `docker: unknown command: docker compose` | 本机 **`docker` 不带 compose 子命令**（多为仅装了 `docker.io`）。同样安装 **Compose V2**（官方源插件 **或** GitHub 独立二进制），见下文。 |
 | `Conflict. The container name "/…_globuy-api" is already in use` | 旧 Compose 遗留容器占用名。执行：`docker ps -a \| grep globuy-api` 后 **`docker rm -f <容器ID>`**，或直接再跑一次 **`bash deploy/aliyun/release-backend.sh`**（新版 **`release.sh`** 会在启动前自动 **`docker rm -f`** 所有名称含 **`globuy-api`** 的容器）。 |
 | 发布脚本卡在 **`npm ci`**、`⠏` 长时间不动 | 多为 **下载依赖**（非死机）。默认 **先试 `npm run build`**，失败后在 **有 TTY** 时询问是否 **`npm ci`**；**无 TTY**（如未加 **`ssh -t`**）默认 **不会自动** `npm ci`，需设置 **`RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL=1`** 或改用交互登录。强制每次先装依赖：**`--frontend-ci-first`**；全量删 **`node_modules`**：**`--frontend-clean`**；可看日志：**`RELEASE_VERBOSE=1`**。 |
+| **`vite build` 占满 CPU/内存、机器险些卡死 | 发版脚本默认 **`RELEASE_FRONTEND_FAST_BUILD=1`**（跳过 React Compiler，构建轻很多）。需要 Compiler 优化运行时：**`RELEASE_FRONTEND_FAST_BUILD=0`**（高配机）或在本机/GitHub Actions 执行 **`npm run build`** 得到 **`dist/`** 后只 **`rsync`** 到服务器。可选 **`RELEASE_FRONTEND_NICE_BUILD=1`** 降低调度优先级。 |
 | `Recreating globuy-api … KeyError: 'ContainerConfig'`、`docker-compose==1.29.x` | **Compose V1（Python）与新版 Docker Engine 不兼容**。必须换 **Compose V2**（见下文）。删掉失败容器：`docker rm -f globuy-api`，再在 voyage 根目录 **`bash deploy/aliyun/release-backend.sh`** |
 | 浏览器 **`502 Bad Gateway`**、`/api/` 全挂 | 多为 **后端容器未起来**（参见上一行）或 Nginx **`proxy_pass`** 端口不对；服务器上执行 **`docker ps`** 看是否有 **`globuy-api`**，`curl -sS http://127.0.0.1:8080/api/v1/tags` 能否通 |
 | BuildKit / buildx 报错 | **`unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD`** 后 **`DOCKER_BUILDKIT=0`** 再 **`docker compose`** / **`docker-compose`** … `build` |

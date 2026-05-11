@@ -106,6 +106,8 @@ DO_NGINX=1
 STOP_API_BEFORE_BUILD=0
 FRONTEND_CLEAN=0
 FRONTEND_CI_FIRST="${FRONTEND_CI_FIRST:-0}"
+# 前端 vite build：默认跳过 React Compiler（FAST_BUILD=1，省 CPU/内存）；设为 0 则在服务器上完整 Compiler（慢）。高配或 CI 可用 0。
+RELEASE_FRONTEND_FAST_BUILD="${RELEASE_FRONTEND_FAST_BUILD:-1}"
 # 后端镜像构建：quick=默认，宿主 Gradle + Dockerfile.fast（需 JDK）；standard=容器内 Gradle；full=docker --no-cache
 BACKEND_BUILD_MODE="${BACKEND_BUILD_MODE:-quick}"
 BACKEND_CLI_FLAG=""
@@ -140,6 +142,8 @@ Globuy 一键发版脚本（详见 deploy/aliyun/DEPLOY_STEP_BY_STEP.md）
   RELEASE_SUPPRESS_RETRY_HINT 设为 1 时失败不打印下方「全量重试」复制块
   FRONTEND_CI_FIRST           设为 1 等价于 --frontend-ci-first（始终先 npm ci）
   RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL  非交互（无 TTY）下 build 失败后才自动 npm ci：必须设为 1 才会自动 ci（默认不自动，需你在交互终端选 y 或手动 ci）
+  RELEASE_FRONTEND_FAST_BUILD       默认 1：前端 production build 跳过 React Compiler（构建快、省内存；运行时无效渲染可能略多）。设为 0 启用 Compiler（慢）。「既要 Compiler 又快」请在 CI/本机 build 后只 rsync dist
+  RELEASE_FRONTEND_NICE_BUILD       设为 1：前端 npm run build 使用 nice -n 15，减轻抢满 CPU（墙钟时间略增）
   RELEASE_GIT_PULL_NO_AUTO_SKIP    设为 1：非交互下 git pull 失败后将不再自动「跳过 pull 继续」
   RELEASE_BACKEND_QUICK_FAIL_NO_STANDARD 设为 1：宿主 Gradle 失败后不自动改 standard
   RELEASE_DOCKER_FAIL_NO_AUTO_FULL 设为 1：Docker 失败后不自动 --no-cache 重建
@@ -226,6 +230,13 @@ if [[ "$DO_FRONTEND" -eq 1 ]]; then
   [[ -d "$FRONTEND_REPO" ]] || die "前端目录不存在: $FRONTEND_REPO"
   command -v npm >/dev/null || die "未找到 npm，请先安装 Node.js ≥ 20"
   mkdir -p "$WWW_FRONTEND"
+  if [[ "${RELEASE_FRONTEND_FAST_BUILD:-1}" == "1" ]]; then
+    export FAST_BUILD=1
+    log "前端构建：RELEASE_FRONTEND_FAST_BUILD=1（默认）跳过 React Compiler，减轻 CPU/内存；要 Compiler 请 RELEASE_FRONTEND_FAST_BUILD=0 或在 CI/本机构建 dist 后 rsync"
+  else
+    unset FAST_BUILD 2>/dev/null || true
+    log "前端构建：RELEASE_FRONTEND_FAST_BUILD=0，启用 React Compiler（更耗资源，运行时更少无效渲染）"
+  fi
   if [[ "$FRONTEND_CLEAN" -eq 1 ]]; then
     log "前端全量：移除 node_modules 与 dist 后重装依赖"
     rm -rf "$FRONTEND_REPO/node_modules" "$FRONTEND_REPO/dist"
@@ -233,9 +244,17 @@ if [[ "$DO_FRONTEND" -eq 1 ]]; then
   _npm_flags=(ci --no-audit --fund=false)
   [[ "${RELEASE_VERBOSE:-}" == "1" ]] && _npm_flags+=(--loglevel=info)
 
+  _frontend_npm_run_build() {
+    if [[ "${RELEASE_FRONTEND_NICE_BUILD:-0}" == "1" ]] && command -v nice >/dev/null 2>&1; then
+      nice -n 15 npm run build
+    else
+      npm run build
+    fi
+  }
+
   frontend_npm_ci_then_build() {
     log "前端 npm ci + npm run build（可加 RELEASE_VERBOSE=1 看进度）"
-    if ! ( cd "$FRONTEND_REPO" && npm "${_npm_flags[@]}" && npm run build ); then
+    if ! ( cd "$FRONTEND_REPO" && npm "${_npm_flags[@]}" && _frontend_npm_run_build ); then
       print_full_retry_commands
       exit 1
     fi
@@ -243,7 +262,7 @@ if [[ "$DO_FRONTEND" -eq 1 ]]; then
 
   frontend_try_build_then_maybe_ci() {
     log "前端优先仅 npm run build（未加 --frontend-ci-first / FRONTEND_CI_FIRST / --frontend-clean 时不会先 npm ci）"
-    if ( cd "$FRONTEND_REPO" && npm run build ); then
+    if ( cd "$FRONTEND_REPO" && _frontend_npm_run_build ); then
       return 0
     fi
     log "npm run build 失败（常见：缺 node_modules、package-lock 更新后未同步依赖）"
