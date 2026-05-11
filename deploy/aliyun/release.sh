@@ -21,6 +21,12 @@ print_full_retry_commands() {
 
 RELEASE_VERBOSE=1 bash $vr/deploy/aliyun/release.sh --frontend-clean --backend-full
 
+# 仅前端：强制每次先 npm ci（不信任现有 node_modules 时）：
+bash $vr/deploy/aliyun/release.sh --frontend-only --frontend-ci-first
+
+# 仅前端（无人值守/CI）：先试 build，失败则自动 npm ci：
+RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL=1 bash $vr/deploy/aliyun/release.sh --frontend-only
+
 # 仅前端全量（删 node_modules + dist 再装）：
 RELEASE_VERBOSE=1 bash $vr/deploy/aliyun/release.sh --frontend-only --frontend-clean
 
@@ -36,6 +42,29 @@ bash $vr/deploy/aliyun/release.sh --backend-only --backend-standard
 EOF
   echo "[release] ---------------------------------------------------------------" >&2
   echo "" >&2
+}
+
+# 交互终端：询问是否执行降级；非交互：默认自动降级（可用 *_NO_AUTO_* 环境变量关闭）
+release_wants_fallback() {
+  local prompt="$1"
+  local block_auto_env="${2:-}"
+  if [[ -t 0 ]]; then
+    read -r -p "[release] ${prompt} [y/N] " _yn || true
+    [[ "${_yn:-}" =~ ^[yY](es)?$ ]]
+    return $?
+  fi
+  if [[ -n "$block_auto_env" ]]; then
+    case "$block_auto_env" in
+      *[!a-zA-Z0-9_]*) die "release_wants_fallback: 非法环境变量名" ;;
+    esac
+    eval "local _blk=\${${block_auto_env}:-}"
+    if [[ "${_blk:-}" == "1" ]]; then
+      log "非交互环境且 ${block_auto_env}=1，不自动执行降级步骤"
+      return 1
+    fi
+  fi
+  log "非交互终端：自动执行降级步骤"
+  return 0
 }
 
 docker_compose() {
@@ -76,6 +105,7 @@ DO_BACKEND=1
 DO_NGINX=1
 STOP_API_BEFORE_BUILD=0
 FRONTEND_CLEAN=0
+FRONTEND_CI_FIRST="${FRONTEND_CI_FIRST:-0}"
 # 后端镜像构建：quick=默认，宿主 Gradle + Dockerfile.fast（需 JDK）；standard=容器内 Gradle；full=docker --no-cache
 BACKEND_BUILD_MODE="${BACKEND_BUILD_MODE:-quick}"
 BACKEND_CLI_FLAG=""
@@ -93,8 +123,9 @@ Globuy 一键发版脚本（详见 deploy/aliyun/DEPLOY_STEP_BY_STEP.md）
   --backend-standard  标准后端：容器内 Gradle（无需宿主 JDK，但每次多半整编较慢）
   --backend-quick     快速后端（默认）：宿主 ./gradlew bootJar + Dockerfile.fast（需 JDK 17+）
   --backend-full      全量后端：docker build --no-cache（依赖/镜像缓存异常时用）
-  --frontend-clean    全量前端：构建前删除 foreign-trade-shop 下 node_modules 与 dist，再 npm ci（依赖/锁异常或疑似装坏时用）
-  （默认）            quick；未装 JDK 时请用 --backend-standard 或 BACKEND_BUILD_MODE=standard
+  --frontend-clean    全量前端：删除 node_modules 与 dist，再 npm ci + build（依赖/锁异常时用）
+  --frontend-ci-first 前端始终先 npm ci 再 build（默认改为先试 build；非交互下失败后须 RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL=1 才会自动 ci）
+  （默认）            后端 quick；前端先试 build；未装 JDK 请 --backend-standard 或 BACKEND_BUILD_MODE=standard
 
 环境变量（可选）：
   GLOBUY_ROOT   默认 /opt/globuy
@@ -107,6 +138,13 @@ Globuy 一键发版脚本（详见 deploy/aliyun/DEPLOY_STEP_BY_STEP.md）
   RELEASE_USE_LEGACY_COMPOSE  设为 1 时才允许走 Python docker-compose 1.x（不推荐）
   RELEASE_VERBOSE             设为 1 时 npm ci 使用 --loglevel=info（便于确认是否在拉依赖而非死机）
   RELEASE_SUPPRESS_RETRY_HINT 设为 1 时失败不打印下方「全量重试」复制块
+  FRONTEND_CI_FIRST           设为 1 等价于 --frontend-ci-first（始终先 npm ci）
+  RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL  非交互（无 TTY）下 build 失败后才自动 npm ci：必须设为 1 才会自动 ci（默认不自动，需你在交互终端选 y 或手动 ci）
+  RELEASE_GIT_PULL_NO_AUTO_SKIP    设为 1：非交互下 git pull 失败后将不再自动「跳过 pull 继续」
+  RELEASE_BACKEND_QUICK_FAIL_NO_STANDARD 设为 1：宿主 Gradle 失败后不自动改 standard
+  RELEASE_DOCKER_FAIL_NO_AUTO_FULL 设为 1：Docker 失败后不自动 --no-cache 重建
+  RELEASE_RSYNC_NO_AUTO_RETRY      设为 1：rsync 失败后不自动重试一次
+  RELEASE_NGINX_FAIL_NO_SKIP       设为 1：nginx 失败后不提示忽略（交互仍可选取消）
 EOF
 }
 
@@ -131,6 +169,7 @@ while [[ $# -gt 0 ]]; do
       BACKEND_CLI_FLAG=full
       ;;
     --frontend-clean) FRONTEND_CLEAN=1 ;;
+    --frontend-ci-first) FRONTEND_CI_FIRST=1 ;;
     *) echo "未知参数: $1" >&2; usage >&2; exit 1 ;;
   esac
   shift
@@ -148,20 +187,38 @@ require_file() { [[ -f "$1" ]] || die "缺少文件: $1（首次部署请复制 
 require_file "$ENV_FILE"
 
 if [[ "$DO_PULL" -eq 1 ]]; then
+  release_git_pull_repo() {
+    local repo="$1"
+    local label="$2"
+    log "git pull ${label}: $repo"
+    if git -C "$repo" pull --ff-only; then
+      return 0
+    fi
+    log "git pull 失败（${label}）"
+    if [[ -t 0 ]]; then
+      read -r -p "[release] 是否重试一次 git pull？[Y/n] " _r || true
+      if [[ ! "${_r:-}" =~ ^[nN](o)?$ ]]; then
+        git -C "$repo" pull --ff-only && return 0
+      fi
+    else
+      log "非交互：自动重试 pull 一次"
+      sleep 1
+      git -C "$repo" pull --ff-only && return 0
+    fi
+    if release_wants_fallback "是否跳过本次 pull，使用服务器当前代码继续发布？" "RELEASE_GIT_PULL_NO_AUTO_SKIP"; then
+      log "已跳过 ${label} 的 pull，继续后续步骤"
+      return 0
+    fi
+    print_full_retry_commands
+    exit 1
+  }
+
   if [[ "$DO_BACKEND" -eq 1 ]]; then
-    log "git pull 后端: $VOYAGE_REPO"
-    git -C "$VOYAGE_REPO" pull --ff-only || {
-      print_full_retry_commands
-      exit 1
-    }
+    release_git_pull_repo "$VOYAGE_REPO" "后端"
   fi
   if [[ "$DO_FRONTEND" -eq 1 ]]; then
     [[ -d "$FRONTEND_REPO" ]] || die "前端目录不存在: $FRONTEND_REPO"
-    log "git pull 前端: $FRONTEND_REPO"
-    git -C "$FRONTEND_REPO" pull --ff-only || {
-      print_full_retry_commands
-      exit 1
-    }
+    release_git_pull_repo "$FRONTEND_REPO" "前端"
   fi
 fi
 
@@ -175,15 +232,58 @@ if [[ "$DO_FRONTEND" -eq 1 ]]; then
   fi
   _npm_flags=(ci --no-audit --fund=false)
   [[ "${RELEASE_VERBOSE:-}" == "1" ]] && _npm_flags+=(--loglevel=info)
-  log "前端 npm ci + build（长时间停在 npm ci 多为下载依赖；可加 RELEASE_VERBOSE=1 看进度；网络慢可配 ~/.npmrc registry / fetch-timeout）"
-  if ! ( cd "$FRONTEND_REPO" && npm "${_npm_flags[@]}" && npm run build ); then
-    print_full_retry_commands
-    exit 1
+
+  frontend_npm_ci_then_build() {
+    log "前端 npm ci + npm run build（可加 RELEASE_VERBOSE=1 看进度）"
+    if ! ( cd "$FRONTEND_REPO" && npm "${_npm_flags[@]}" && npm run build ); then
+      print_full_retry_commands
+      exit 1
+    fi
+  }
+
+  frontend_try_build_then_maybe_ci() {
+    log "前端优先仅 npm run build（未加 --frontend-ci-first / FRONTEND_CI_FIRST / --frontend-clean 时不会先 npm ci）"
+    if ( cd "$FRONTEND_REPO" && npm run build ); then
+      return 0
+    fi
+    log "npm run build 失败（常见：缺 node_modules、package-lock 更新后未同步依赖）"
+    if [[ -t 0 ]]; then
+      read -r -p "[release] 是否执行 npm ci 重装依赖后再 build？[y/N] " _yn || true
+      if [[ ! "${_yn:-}" =~ ^[yY](es)?$ ]]; then
+        log "已跳过 npm ci。可加 --frontend-ci-first，或在前端目录手动 npm ci 后重试"
+        print_full_retry_commands
+        exit 1
+      fi
+      log "将执行 npm ci 后再次 build"
+    else
+      if [[ "${RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL:-}" != "1" ]]; then
+        log "非交互环境：默认不在失败后自动 npm ci。请用 ssh -t 登录后重试以便手动选 y，或设置 RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL=1 后再跑本脚本"
+        print_full_retry_commands
+        exit 1
+      fi
+      log "非交互环境：RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL=1，自动执行 npm ci 后重试 build"
+    fi
+    frontend_npm_ci_then_build
+  }
+
+  if [[ "$FRONTEND_CLEAN" -eq 1 ]] || [[ "$FRONTEND_CI_FIRST" -eq 1 ]]; then
+    frontend_npm_ci_then_build
+  else
+    frontend_try_build_then_maybe_ci
   fi
+
   log "同步静态资源 → $WWW_FRONTEND"
   if ! rsync -a --delete "$FRONTEND_REPO/dist/" "$WWW_FRONTEND/"; then
-    print_full_retry_commands
-    exit 1
+    log "rsync 同步失败"
+    if release_wants_fallback "是否重试一次 rsync？" "RELEASE_RSYNC_NO_AUTO_RETRY"; then
+      rsync -a --delete "$FRONTEND_REPO/dist/" "$WWW_FRONTEND/" || {
+        print_full_retry_commands
+        exit 1
+      }
+    else
+      print_full_retry_commands
+      exit 1
+    fi
   fi
 fi
 
@@ -205,8 +305,15 @@ if [[ "$DO_BACKEND" -eq 1 ]]; then
         chmod +x ./gradlew 2>/dev/null || true
         ./gradlew bootJar -x test
       ); then
-        print_full_retry_commands
-        exit 1
+        log "宿主 Gradle 失败"
+        if release_wants_fallback "是否改用容器内 Gradle（standard）构建镜像？耗时更长但可不依赖宿主编译。" "RELEASE_BACKEND_QUICK_FAIL_NO_STANDARD"; then
+          BACKEND_BUILD_MODE=standard
+          compose_files=(-f "$COMPOSE_REL")
+          log "已切换为 standard，将在 Docker 镜像构建阶段执行 Gradle"
+        else
+          print_full_retry_commands
+          exit 1
+        fi
       fi
       ;;
     full)
@@ -219,28 +326,44 @@ if [[ "$DO_BACKEND" -eq 1 ]]; then
   else
     log "Docker 重建并后台启动"
   fi
-  if ! (
-    cd "$VOYAGE_REPO"
-    if [[ "$BACKEND_BUILD_MODE" == standard ]]; then
-      unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD
-      export DOCKER_BUILDKIT=0
-    fi
-    if [[ "$STOP_API_BEFORE_BUILD" -eq 1 ]]; then
-      log "先停止 $COMPOSE_API_SERVICE（减轻本机构建期争抢；至 up --build 完成前 API 不可用）"
-      docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" stop "$COMPOSE_API_SERVICE" || true
-    fi
-    # 旧 Compose V1 失败重建常留下「项目ID_globuy-api」，与 compose 里 container_name: globuy-api 冲突
-    log "清理名称含 globuy-api 的旧容器（避免 already in use）"
-    docker ps -aq --filter name=globuy-api | xargs -r docker rm -f 2>/dev/null || true
-    if [[ "$BACKEND_BUILD_MODE" == full ]]; then
-      docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" build --no-cache "$COMPOSE_API_SERVICE"
-      docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" up -d
+
+  backend_docker_up() {
+    local force_nocache="$1"
+    (
+      cd "$VOYAGE_REPO"
+      if [[ "$BACKEND_BUILD_MODE" == standard ]]; then
+        unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD
+        export DOCKER_BUILDKIT=0
+      fi
+      if [[ "$STOP_API_BEFORE_BUILD" -eq 1 ]]; then
+        log "先停止 $COMPOSE_API_SERVICE（减轻本机构建期争抢；至 up --build 完成前 API 不可用）"
+        docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" stop "$COMPOSE_API_SERVICE" || true
+      fi
+      log "清理名称含 globuy-api 的旧容器（避免 already in use）"
+      docker ps -aq --filter name=globuy-api | xargs -r docker rm -f 2>/dev/null || true
+      if [[ "$force_nocache" -eq 1 ]]; then
+        docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" build --no-cache "$COMPOSE_API_SERVICE"
+        docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" up -d
+      elif [[ "$BACKEND_BUILD_MODE" == full ]]; then
+        docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" build --no-cache "$COMPOSE_API_SERVICE"
+        docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" up -d
+      else
+        docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" up -d --build
+      fi
+    )
+  }
+
+  if ! backend_docker_up 0; then
+    log "Docker 构建或启动失败"
+    if release_wants_fallback "是否对 voyage-api 执行无缓存重建（docker build --no-cache）后再启动？" "RELEASE_DOCKER_FAIL_NO_AUTO_FULL"; then
+      backend_docker_up 1 || {
+        print_full_retry_commands
+        exit 1
+      }
     else
-      docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" up -d --build
+      print_full_retry_commands
+      exit 1
     fi
-  ); then
-    print_full_retry_commands
-    exit 1
   fi
   log "后端健康检查（本地 8080，可按需改 API_PORT）"
   sleep 2
@@ -250,7 +373,14 @@ fi
 if [[ "$DO_NGINX" -eq 1 ]]; then
   if command -v nginx >/dev/null 2>&1; then
     log "nginx -t && reload"
-    sudo nginx -t && sudo systemctl reload nginx
+    if ! ( sudo nginx -t && sudo systemctl reload nginx ); then
+      log "nginx 校验或 reload 失败"
+      if release_wants_fallback "是否忽略 nginx 错误并结束发布（请稍后手动 nginx -t / reload）？" "RELEASE_NGINX_FAIL_NO_SKIP"; then
+        log "已按你的选择忽略 nginx 错误"
+      else
+        exit 1
+      fi
+    fi
   else
     log "未安装 nginx，跳过 reload"
   fi

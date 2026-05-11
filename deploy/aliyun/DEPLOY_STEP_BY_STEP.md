@@ -2,7 +2,7 @@
 
 面向：**Docker / docker-compose、Nginx、双仓库（voyage + foreign-trade-shop）**。变量与密钥勿提交 Git。
 
-**日常重新发版**：在服务器上对 `release.sh` 赋可执行权限后直接执行即可（默认：前后端 `git pull`、前端 `npm ci && build` 并同步到 `/opt/globuy/www/frontend`、后端 **默认 quick**：宿主 `./gradlew bootJar` + `Dockerfile.fast` 再 `docker compose up -d --build`，需 **JDK 17+**；未装 JDK 请加 **`--backend-standard`**、最后 `nginx` reload）：
+**日常重新发版**：在服务器上对 `release.sh` 赋可执行权限后直接执行即可（默认：前后端 `git pull`、前端 **先试** `npm run build`，失败再在交互终端询问是否 `npm ci`，同步到 `/opt/globuy/www/frontend`；后端 **默认 quick**：宿主 `./gradlew bootJar` + `Dockerfile.fast` 再 `docker compose up -d --build`，需 **JDK 17+**；未装 JDK 请加 **`--backend-standard`**、最后 `nginx` reload）：
 
 ```bash
 chmod +x /opt/globuy/repo/voyage/deploy/aliyun/release*.sh /opt/globuy/repo/voyage/deploy/publish-*.sh
@@ -268,7 +268,7 @@ sudo nginx -t && sudo systemctl reload nginx
 | `Unable to locate package docker-compose-plugin` | 当前 apt **未包含 Docker 官方插件包**（阿里云常见）。见下文 **「安装 Compose V2（插件缺省 / docker compose 不可用）」**。 |
 | `docker: unknown command: docker compose` | 本机 **`docker` 不带 compose 子命令**（多为仅装了 `docker.io`）。同样安装 **Compose V2**（官方源插件 **或** GitHub 独立二进制），见下文。 |
 | `Conflict. The container name "/…_globuy-api" is already in use` | 旧 Compose 遗留容器占用名。执行：`docker ps -a \| grep globuy-api` 后 **`docker rm -f <容器ID>`**，或直接再跑一次 **`bash deploy/aliyun/release-backend.sh`**（新版 **`release.sh`** 会在启动前自动 **`docker rm -f`** 所有名称含 **`globuy-api`** 的容器）。 |
-| 发布脚本卡在 **`npm ci`**、`⠏` 长时间不动 | 多为 **下载依赖**（非死机）。可加 **`RELEASE_VERBOSE=1`** 再看输出；锁或 **`node_modules` 异常**时用 **`--frontend-clean`** 全量重装；必要时在前端目录 **`~/.npmrc`** 设置 **`fetch-timeout`** / 镜像 **`registry`**。 |
+| 发布脚本卡在 **`npm ci`**、`⠏` 长时间不动 | 多为 **下载依赖**（非死机）。默认 **先试 `npm run build`**，失败后在 **有 TTY** 时询问是否 **`npm ci`**；**无 TTY**（如未加 **`ssh -t`**）默认 **不会自动** `npm ci`，需设置 **`RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL=1`** 或改用交互登录。强制每次先装依赖：**`--frontend-ci-first`**；全量删 **`node_modules`**：**`--frontend-clean`**；可看日志：**`RELEASE_VERBOSE=1`**。 |
 | `Recreating globuy-api … KeyError: 'ContainerConfig'`、`docker-compose==1.29.x` | **Compose V1（Python）与新版 Docker Engine 不兼容**。必须换 **Compose V2**（见下文）。删掉失败容器：`docker rm -f globuy-api`，再在 voyage 根目录 **`bash deploy/aliyun/release-backend.sh`** |
 | 浏览器 **`502 Bad Gateway`**、`/api/` 全挂 | 多为 **后端容器未起来**（参见上一行）或 Nginx **`proxy_pass`** 端口不对；服务器上执行 **`docker ps`** 看是否有 **`globuy-api`**，`curl -sS http://127.0.0.1:8080/api/v1/tags` 能否通 |
 | BuildKit / buildx 报错 | **`unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD`** 后 **`DOCKER_BUILDKIT=0`** 再 **`docker compose`** / **`docker-compose`** … `build` |
