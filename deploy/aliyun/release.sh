@@ -11,6 +11,33 @@ set -euo pipefail
 log() { printf '[release] %s\n' "$*"; }
 die() { echo "[release] 错误: $*" >&2; exit 1; }
 
+# 快速步骤失败时打印可复制的「全量」命令（依赖 RELEASE_VERBOSE / --frontend-clean / --backend-full 等）
+print_full_retry_commands() {
+  [[ "${RELEASE_SUPPRESS_RETRY_HINT:-}" == "1" ]] && return 0
+  local vr="$VOYAGE_REPO"
+  echo "" >&2
+  echo "[release] ---------- 以下为「全量重试」示例，按需复制一行执行 ----------" >&2
+  cat >&2 <<EOF
+
+RELEASE_VERBOSE=1 bash $vr/deploy/aliyun/release.sh --frontend-clean --backend-full
+
+# 仅前端全量（删 node_modules + dist 再装）：
+RELEASE_VERBOSE=1 bash $vr/deploy/aliyun/release.sh --frontend-only --frontend-clean
+
+# 仅后端：Docker 镜像无缓存重建
+bash $vr/deploy/aliyun/release.sh --backend-only --backend-full
+
+# 仅后端：改容器内 Gradle（宿主 ./gradlew 失败时再试）
+bash $vr/deploy/aliyun/release.sh --backend-only --backend-standard
+
+# 若使用 /opt 入口（路径按你机器调整）：
+# RELEASE_VERBOSE=1 /opt/publish-frontend.sh --frontend-clean
+# /opt/publish-backend.sh --backend-full
+EOF
+  echo "[release] ---------------------------------------------------------------" >&2
+  echo "" >&2
+}
+
 docker_compose() {
   # Compose V2（docker compose）与新版 Docker 配套。Ubuntu 自带 Python **docker-compose 1.29** 会 KeyError: ContainerConfig，禁止默认使用。
   if docker compose version >/dev/null 2>&1; then
@@ -48,6 +75,7 @@ DO_FRONTEND=1
 DO_BACKEND=1
 DO_NGINX=1
 STOP_API_BEFORE_BUILD=0
+FRONTEND_CLEAN=0
 # 后端镜像构建：quick=默认，宿主 Gradle + Dockerfile.fast（需 JDK）；standard=容器内 Gradle；full=docker --no-cache
 BACKEND_BUILD_MODE="${BACKEND_BUILD_MODE:-quick}"
 BACKEND_CLI_FLAG=""
@@ -65,6 +93,7 @@ Globuy 一键发版脚本（详见 deploy/aliyun/DEPLOY_STEP_BY_STEP.md）
   --backend-standard  标准后端：容器内 Gradle（无需宿主 JDK，但每次多半整编较慢）
   --backend-quick     快速后端（默认）：宿主 ./gradlew bootJar + Dockerfile.fast（需 JDK 17+）
   --backend-full      全量后端：docker build --no-cache（依赖/镜像缓存异常时用）
+  --frontend-clean    全量前端：构建前删除 foreign-trade-shop 下 node_modules 与 dist，再 npm ci（依赖/锁异常或疑似装坏时用）
   （默认）            quick；未装 JDK 时请用 --backend-standard 或 BACKEND_BUILD_MODE=standard
 
 环境变量（可选）：
@@ -76,6 +105,8 @@ Globuy 一键发版脚本（详见 deploy/aliyun/DEPLOY_STEP_BY_STEP.md）
   COMPOSE_API_SERVICE  compose 里 API 服务名，默认 voyage-api
   BACKEND_BUILD_MODE   standard | quick | full（默认 quick）；三种 --backend-* 勿混用
   RELEASE_USE_LEGACY_COMPOSE  设为 1 时才允许走 Python docker-compose 1.x（不推荐）
+  RELEASE_VERBOSE             设为 1 时 npm ci 使用 --loglevel=info（便于确认是否在拉依赖而非死机）
+  RELEASE_SUPPRESS_RETRY_HINT 设为 1 时失败不打印下方「全量重试」复制块
 EOF
 }
 
@@ -99,6 +130,7 @@ while [[ $# -gt 0 ]]; do
       [[ -z "$BACKEND_CLI_FLAG" ]] || die "不要同时使用多种 --backend-standard / --backend-quick / --backend-full"
       BACKEND_CLI_FLAG=full
       ;;
+    --frontend-clean) FRONTEND_CLEAN=1 ;;
     *) echo "未知参数: $1" >&2; usage >&2; exit 1 ;;
   esac
   shift
@@ -118,12 +150,18 @@ require_file "$ENV_FILE"
 if [[ "$DO_PULL" -eq 1 ]]; then
   if [[ "$DO_BACKEND" -eq 1 ]]; then
     log "git pull 后端: $VOYAGE_REPO"
-    git -C "$VOYAGE_REPO" pull --ff-only
+    git -C "$VOYAGE_REPO" pull --ff-only || {
+      print_full_retry_commands
+      exit 1
+    }
   fi
   if [[ "$DO_FRONTEND" -eq 1 ]]; then
     [[ -d "$FRONTEND_REPO" ]] || die "前端目录不存在: $FRONTEND_REPO"
     log "git pull 前端: $FRONTEND_REPO"
-    git -C "$FRONTEND_REPO" pull --ff-only
+    git -C "$FRONTEND_REPO" pull --ff-only || {
+      print_full_retry_commands
+      exit 1
+    }
   fi
 fi
 
@@ -131,10 +169,22 @@ if [[ "$DO_FRONTEND" -eq 1 ]]; then
   [[ -d "$FRONTEND_REPO" ]] || die "前端目录不存在: $FRONTEND_REPO"
   command -v npm >/dev/null || die "未找到 npm，请先安装 Node.js ≥ 20"
   mkdir -p "$WWW_FRONTEND"
-  log "前端 npm ci + build"
-  ( cd "$FRONTEND_REPO" && npm ci && npm run build )
+  if [[ "$FRONTEND_CLEAN" -eq 1 ]]; then
+    log "前端全量：移除 node_modules 与 dist 后重装依赖"
+    rm -rf "$FRONTEND_REPO/node_modules" "$FRONTEND_REPO/dist"
+  fi
+  _npm_flags=(ci --no-audit --fund=false)
+  [[ "${RELEASE_VERBOSE:-}" == "1" ]] && _npm_flags+=(--loglevel=info)
+  log "前端 npm ci + build（长时间停在 npm ci 多为下载依赖；可加 RELEASE_VERBOSE=1 看进度；网络慢可配 ~/.npmrc registry / fetch-timeout）"
+  if ! ( cd "$FRONTEND_REPO" && npm "${_npm_flags[@]}" && npm run build ); then
+    print_full_retry_commands
+    exit 1
+  fi
   log "同步静态资源 → $WWW_FRONTEND"
-  rsync -a --delete "$FRONTEND_REPO/dist/" "$WWW_FRONTEND/"
+  if ! rsync -a --delete "$FRONTEND_REPO/dist/" "$WWW_FRONTEND/"; then
+    print_full_retry_commands
+    exit 1
+  fi
 fi
 
 if [[ "$DO_BACKEND" -eq 1 ]]; then
@@ -150,11 +200,14 @@ if [[ "$DO_BACKEND" -eq 1 ]]; then
     quick)
       command -v java >/dev/null || die "quick 模式（默认）需要服务器已安装 JDK（建议 17）；未装 JDK 请执行：--backend-standard 或 BACKEND_BUILD_MODE=standard"
       log "后端构建模式：quick（宿主 ./gradlew bootJar，镜像仅 COPY JAR，通常明显更快）"
-      (
+      if ! (
         cd "$VOYAGE_REPO"
         chmod +x ./gradlew 2>/dev/null || true
         ./gradlew bootJar -x test
-      )
+      ); then
+        print_full_retry_commands
+        exit 1
+      fi
       ;;
     full)
       log "后端构建模式：full（docker --no-cache，全量重建镜像层，最慢；依赖或 Docker 缓存异常时用）"
@@ -166,7 +219,7 @@ if [[ "$DO_BACKEND" -eq 1 ]]; then
   else
     log "Docker 重建并后台启动"
   fi
-  (
+  if ! (
     cd "$VOYAGE_REPO"
     if [[ "$BACKEND_BUILD_MODE" == standard ]]; then
       unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD
@@ -185,7 +238,10 @@ if [[ "$DO_BACKEND" -eq 1 ]]; then
     else
       docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" up -d --build
     fi
-  )
+  ); then
+    print_full_retry_commands
+    exit 1
+  fi
   log "后端健康检查（本地 8080，可按需改 API_PORT）"
   sleep 2
   curl -fsS "http://127.0.0.1:${API_PORT:-8080}/api/v1/tags" >/dev/null && log "GET /api/v1/tags 正常" || log "警告: /api/v1/tags 未响应，请 docker compose logs $COMPOSE_API_SERVICE 自查"

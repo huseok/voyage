@@ -37,6 +37,7 @@ docker compose -f deploy/aliyun/docker-compose.stack.yml --env-file /opt/globuy/
 cd /opt/globuy/repo/foreign-trade-shop
 cp .env.production.example .env.production   # 同域反代时 VITE_API_BASE_URL 留空
 npm ci && npm run build
+# 一键脚本：可加 --frontend-clean 全量删 node_modules；RELEASE_VERBOSE=1 可看 npm 进度
 rsync -a --delete dist/ /opt/globuy/www/frontend/
 ```
 
