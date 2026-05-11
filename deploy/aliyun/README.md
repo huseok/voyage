@@ -81,8 +81,7 @@ cd /opt/globuy/repo/foreign-trade-shop
 cp .env.production.example .env.production   # 同域反代时 VITE_API_BASE_URL 留空
 npm ci && npm run build
 # 一键脚本默认先试 build，失败再询问是否 npm ci；强制每次 ci：--frontend-ci-first；全量删目录：--frontend-clean；VERBOSE：RELEASE_VERBOSE=1
-# 小机防卡：release.sh 默认 RELEASE_FRONTEND_FAST_BUILD=1（跳过 React Compiler，构建快）；要 Compiler：RELEASE_FRONTEND_FAST_BUILD=0，或在本机/CI 执行 npm run build 后只 rsync dist
-# 前端 vite：默认 React Compiler 只处理 src 下除 admin 以外的页面（缩短构建）；全量含后台：REACT_COMPILER_ALL_SRC=1 npm run build
+# React Compiler 档位 REACT_COMPILER_SCOPE（release.sh 用 RELEASE_FRONTEND_COMPILER_SCOPE）：0=关 1=仅买家端（排除 src/admin）2=含后台；发版默认 0。本地：npm run build:scope0 / :scope2；详见 foreign-trade-shop vite.config.ts
 rsync -a --delete dist/ /opt/globuy/www/frontend/
 ```
 

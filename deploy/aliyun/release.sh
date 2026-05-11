@@ -27,6 +27,9 @@ bash $vr/deploy/aliyun/release.sh --frontend-only --frontend-ci-first
 # 仅前端（无人值守/CI）：先试 build，失败则自动 npm ci：
 RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL=1 bash $vr/deploy/aliyun/release.sh --frontend-only
 
+# 仅前端：启用 React Compiler 买家侧（scope 1；默认发版为 0 关闭）：
+# RELEASE_FRONTEND_COMPILER_SCOPE=1 bash $vr/deploy/aliyun/release.sh --frontend-only
+
 # 仅前端全量（删 node_modules + dist 再装）：
 RELEASE_VERBOSE=1 bash $vr/deploy/aliyun/release.sh --frontend-only --frontend-clean
 
@@ -106,8 +109,8 @@ DO_NGINX=1
 STOP_API_BEFORE_BUILD=0
 FRONTEND_CLEAN=0
 FRONTEND_CI_FIRST="${FRONTEND_CI_FIRST:-0}"
-# 前端 vite build：默认跳过 React Compiler（FAST_BUILD=1，省 CPU/内存）；设为 0 则在服务器上完整 Compiler（慢）。高配或 CI 可用 0。
-RELEASE_FRONTEND_FAST_BUILD="${RELEASE_FRONTEND_FAST_BUILD:-1}"
+# 前端 React Compiler 范围：0=关闭 1=仅非 admin 2=含 admin（传给 foreign-trade-shop 的 REACT_COMPILER_SCOPE）。小机默认 0。
+RELEASE_FRONTEND_COMPILER_SCOPE="${RELEASE_FRONTEND_COMPILER_SCOPE:-0}"
 # 后端镜像构建：quick=默认，宿主 Gradle + Dockerfile.fast（需 JDK）；standard=容器内 Gradle；full=docker --no-cache
 BACKEND_BUILD_MODE="${BACKEND_BUILD_MODE:-quick}"
 BACKEND_CLI_FLAG=""
@@ -142,7 +145,7 @@ Globuy 一键发版脚本（详见 deploy/aliyun/DEPLOY_STEP_BY_STEP.md）
   RELEASE_SUPPRESS_RETRY_HINT 设为 1 时失败不打印下方「全量重试」复制块
   FRONTEND_CI_FIRST           设为 1 等价于 --frontend-ci-first（始终先 npm ci）
   RELEASE_FRONTEND_AUTO_CI_ON_BUILD_FAIL  非交互（无 TTY）下 build 失败后才自动 npm ci：必须设为 1 才会自动 ci（默认不自动，需你在交互终端选 y 或手动 ci）
-  RELEASE_FRONTEND_FAST_BUILD       默认 1：前端 production build 跳过 React Compiler（构建快、省内存；运行时无效渲染可能略多）。设为 0 启用 Compiler（慢）。「既要 Compiler 又快」请在 CI/本机 build 后只 rsync dist
+  RELEASE_FRONTEND_COMPILER_SCOPE  前端 React Compiler：0=关闭 1=仅买家端（排除 src/admin）2=全 src 含后台。默认 0；详见 foreign-trade-shop vite.config.ts
   RELEASE_FRONTEND_NICE_BUILD       设为 1：前端 npm run build 使用 nice -n 15，减轻抢满 CPU（墙钟时间略增）
   RELEASE_GIT_PULL_NO_AUTO_SKIP    设为 1：非交互下 git pull 失败后将不再自动「跳过 pull 继续」
   RELEASE_BACKEND_QUICK_FAIL_NO_STANDARD 设为 1：宿主 Gradle 失败后不自动改 standard
@@ -230,13 +233,12 @@ if [[ "$DO_FRONTEND" -eq 1 ]]; then
   [[ -d "$FRONTEND_REPO" ]] || die "前端目录不存在: $FRONTEND_REPO"
   command -v npm >/dev/null || die "未找到 npm，请先安装 Node.js ≥ 20"
   mkdir -p "$WWW_FRONTEND"
-  if [[ "${RELEASE_FRONTEND_FAST_BUILD:-1}" == "1" ]]; then
-    export FAST_BUILD=1
-    log "前端构建：RELEASE_FRONTEND_FAST_BUILD=1（默认）跳过 React Compiler，减轻 CPU/内存；要 Compiler 请 RELEASE_FRONTEND_FAST_BUILD=0 或在 CI/本机构建 dist 后 rsync"
-  else
-    unset FAST_BUILD 2>/dev/null || true
-    log "前端构建：RELEASE_FRONTEND_FAST_BUILD=0，启用 React Compiler（更耗资源，运行时更少无效渲染）"
-  fi
+  case "${RELEASE_FRONTEND_COMPILER_SCOPE}" in
+    0|1|2) ;;
+    *) die "RELEASE_FRONTEND_COMPILER_SCOPE 必须是 0、1 或 2，当前: ${RELEASE_FRONTEND_COMPILER_SCOPE}" ;;
+  esac
+  export REACT_COMPILER_SCOPE="${RELEASE_FRONTEND_COMPILER_SCOPE}"
+  log "前端 React Compiler：REACT_COMPILER_SCOPE=${REACT_COMPILER_SCOPE}（0=关 1=仅非 admin 2=含 admin）"
   if [[ "$FRONTEND_CLEAN" -eq 1 ]]; then
     log "前端全量：移除 node_modules 与 dist 后重装依赖"
     rm -rf "$FRONTEND_REPO/node_modules" "$FRONTEND_REPO/dist"
