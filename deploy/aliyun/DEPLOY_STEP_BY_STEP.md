@@ -262,12 +262,48 @@ sudo nginx -t && sudo systemctl reload nginx
 | 现象 | 处理 |
 |------|------|
 | `unknown shorthand flag: 'f'` | 可能用了错误的 compose 子命令；应使用 **`docker compose`**（V2 插件，中间有空格）或 **`docker-compose`**（仅在没有插件时的旧命令） |
-| `Recreating globuy-api … KeyError: 'ContainerConfig'`、`docker-compose==1.29.x` | **Compose V1（Python）与新版 Docker Engine 不兼容**。安装 V2：`sudo apt-get update && sudo apt-get install -y docker-compose-plugin`，用 **`docker compose`**（勿用旧 `docker-compose`）。删掉失败容器后重建：`docker rm -f globuy-api`，再在 voyage 根目录执行 **`bash deploy/aliyun/release-backend.sh`** |
+| `Unable to locate package docker-compose-plugin` | 当前 apt **未包含 Docker 官方插件包**（阿里云常见）。见下文 **「安装 Compose V2（插件缺省 / docker compose 不可用）」**。 |
+| `docker: unknown command: docker compose` | 本机 **`docker` 不带 compose 子命令**（多为仅装了 `docker.io`）。同样安装 **Compose V2**（官方源插件 **或** GitHub 独立二进制），见下文。 |
+| `Conflict. The container name "/…_globuy-api" is already in use` | 旧 Compose 遗留容器占用名。执行：`docker ps -a \| grep globuy-api` 后 **`docker rm -f <容器ID>`**，或直接再跑一次 **`bash deploy/aliyun/release-backend.sh`**（新版 **`release.sh`** 会在启动前自动 **`docker rm -f`** 所有名称含 **`globuy-api`** 的容器）。 |
+| `Recreating globuy-api … KeyError: 'ContainerConfig'`、`docker-compose==1.29.x` | **Compose V1（Python）与新版 Docker Engine 不兼容**。必须换 **Compose V2**（见下文）。删掉失败容器：`docker rm -f globuy-api`，再在 voyage 根目录 **`bash deploy/aliyun/release-backend.sh`** |
 | 浏览器 **`502 Bad Gateway`**、`/api/` 全挂 | 多为 **后端容器未起来**（参见上一行）或 Nginx **`proxy_pass`** 端口不对；服务器上执行 **`docker ps`** 看是否有 **`globuy-api`**，`curl -sS http://127.0.0.1:8080/api/v1/tags` 能否通 |
 | BuildKit / buildx 报错 | **`unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD`** 后 **`DOCKER_BUILDKIT=0`** 再 **`docker compose`** / **`docker-compose`** … `build` |
 | Gradle 停在 `Daemon will be stopped...` 很久 | 见下文 **「Gradle 看似卡住」**；该行多半出现在**构建开头**，后面可能在静默拉依赖/编译 |
 | Workbench **第二个连接**失败：`SocketTimeoutException`、**建立远程连接失败**、`ecs-workbench-inner-share...` | 见下文 **「Workbench 限制」**；控制台 **分屏/新终端** 往往等于第二条通道 |
 | CORS 报错 | 检查 `APP_CORS_ALLOWED_ORIGINS` 是否包含浏览器地址栏里的 **完整 Origin**（含 `http://` 与端口） |
+
+### 安装 Compose V2（插件缺省 / `docker compose` 不可用）
+
+阿里云 Ubuntu 常出现：**`apt` 找不到 `docker-compose-plugin`**，且 **`docker compose`** 提示 **unknown command**。任选其一即可（推荐 **方式 B**，不动 Docker 引擎、最快）。
+
+**方式 A — Docker 官方 apt 源再装插件（会得到 `docker compose`）**
+
+```bash
+sudo apt-get install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+sudo apt-get update
+sudo apt-get install -y docker-compose-plugin
+docker compose version
+```
+
+若已用 **`docker.io`**（Ubuntu 自带）且与 **`docker-ce`** 冲突，可改用 **方式 B**，或按 Docker 文档迁移到 `docker-ce`（此处不展开）。
+
+**方式 B — 独立 Compose V2 二进制（`release.sh` 会识别 `docker-compose` 2.x）**
+
+架构 **`x86_64`**：
+
+```bash
+sudo curl -SL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+docker-compose version
+```
+
+架构 **`aarch64`**（Graviton / 部分 ARM 云主机）把链接里的文件名换成 **`docker-compose-linux-aarch64`**。
+
+确保 **`PATH` 里 `/usr/local/bin` 优先于 `/usr/bin`**（`which docker-compose` 应指向新文件）。若仍存在 Ubuntu 自带的 Python **`docker-compose`**，可先：`sudo apt-get remove -y docker-compose`，再执行上面下载。
 
 ### Workbench 网页 SSH 的限制（含「同一页分屏」）
 

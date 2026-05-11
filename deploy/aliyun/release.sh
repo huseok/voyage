@@ -176,6 +176,9 @@ if [[ "$DO_BACKEND" -eq 1 ]]; then
       log "先停止 $COMPOSE_API_SERVICE（减轻本机构建期争抢；至 up --build 完成前 API 不可用）"
       docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" stop "$COMPOSE_API_SERVICE" || true
     fi
+    # 旧 Compose V1 失败重建常留下「项目ID_globuy-api」，与 compose 里 container_name: globuy-api 冲突
+    log "清理名称含 globuy-api 的旧容器（避免 already in use）"
+    docker ps -aq --filter name=globuy-api | xargs -r docker rm -f 2>/dev/null || true
     if [[ "$BACKEND_BUILD_MODE" == full ]]; then
       docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" build --no-cache "$COMPOSE_API_SERVICE"
       docker_compose "${compose_files[@]}" --env-file "$ENV_FILE" up -d

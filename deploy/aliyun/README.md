@@ -23,7 +23,7 @@ cd /opt/globuy/repo/voyage
 cp deploy/aliyun/env.backend.example /opt/globuy/config/env.backend
 nano /opt/globuy/config/env.backend   # 密码、JWT、CORS（含 http://公网IP）
 chmod 600 /opt/globuy/config/env.backend
-# 须使用 Compose V2：`docker compose`（先 apt 安装 docker-compose-plugin）。勿用 Python docker-compose 1.29，会与新版 Docker 报错 ContainerConfig。
+# 须使用 Compose V2。若 apt 提示找不到 docker-compose-plugin、且 docker compose 报错 unknown command（阿里云常见），见 DEPLOY_STEP_BY_STEP.md「安装 Compose V2」。也可用 GitHub 二进制 docker-compose 2.x 到 /usr/local/bin。
 unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD
 export DOCKER_BUILDKIT=0
 docker compose -f deploy/aliyun/docker-compose.stack.yml --env-file /opt/globuy/config/env.backend up -d --build
