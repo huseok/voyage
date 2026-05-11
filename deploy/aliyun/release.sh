@@ -12,11 +12,26 @@ log() { printf '[release] %s\n' "$*"; }
 die() { echo "[release] 错误: $*" >&2; exit 1; }
 
 docker_compose() {
+  # Compose V2（docker compose）与新版 Docker 配套。Ubuntu 自带 Python **docker-compose 1.29** 会 KeyError: ContainerConfig，禁止默认使用。
   if docker compose version >/dev/null 2>&1; then
     docker compose "$@"
-  else
-    docker-compose "$@"
+    return
   fi
+  if command -v docker-compose >/dev/null 2>&1; then
+    local dc_short dc_line
+    dc_short=$(docker-compose version --short 2>/dev/null || true)
+    dc_line=$(docker-compose version 2>/dev/null | head -n1 || true)
+    if [[ "$dc_short" =~ ^2\. ]] || [[ "$dc_line" =~ docker-compose\ version\ v?2\. ]]; then
+      docker-compose "$@"
+      return
+    fi
+    if [[ "${RELEASE_USE_LEGACY_COMPOSE:-}" == "1" ]]; then
+      log "警告: RELEASE_USE_LEGACY_COMPOSE=1，使用旧版 docker-compose（若报错 ContainerConfig 请装 docker-compose-plugin）" >&2
+      docker-compose "$@"
+      return
+    fi
+  fi
+  die "未检测到 Docker Compose V2。请安装：sudo apt-get update && sudo apt-get install -y docker-compose-plugin ，然后执行 docker compose version 确认。勿再用 Python docker-compose 1.x。"
 }
 
 GLOBUY_ROOT="${GLOBUY_ROOT:-/opt/globuy}"
@@ -60,6 +75,7 @@ Globuy 一键发版脚本（详见 deploy/aliyun/DEPLOY_STEP_BY_STEP.md）
   WWW_FRONTEND  默认 $GLOBUY_ROOT/www/frontend
   COMPOSE_API_SERVICE  compose 里 API 服务名，默认 voyage-api
   BACKEND_BUILD_MODE   standard | quick | full（默认 quick）；三种 --backend-* 勿混用
+  RELEASE_USE_LEGACY_COMPOSE  设为 1 时才允许走 Python docker-compose 1.x（不推荐）
 EOF
 }
 

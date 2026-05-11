@@ -22,7 +22,7 @@ bash /opt/globuy/repo/voyage/deploy/aliyun/release.sh
 |------|------|
 | Ubuntu + SSH | 远程登录；**长时间构建建议用本机 `ssh`，少用控制台网页终端**（Workbench 易超时、常不宜多开） |
 | Docker | 跑 Postgres、后端容器 |
-| docker-compose（或 `docker compose` 插件） | 按 yml 一键起服务 |
+| **`docker compose` V2 插件**（`docker-compose-plugin`，推荐） | 按 yml 一键起服务；**不要用** Ubuntu 自带的 Python **`docker-compose` 1.29** 配新版 Docker，易 **`ContainerConfig`** 报错 |
 | Node.js **≥ 20** | 前端 **`npm run build`**（旧版 Node 12 会报 `Unexpected token '?'`） |
 | Nginx | 对外 `:80` 静态前端 + 反代 `/api`、`/media` |
 
@@ -261,8 +261,10 @@ sudo nginx -t && sudo systemctl reload nginx
 
 | 现象 | 处理 |
 |------|------|
-| `unknown shorthand flag: 'f'` | 可能用了错误的 compose 子命令；改用 **`docker-compose`**（横杠）或安装 Compose V2 插件 |
-| BuildKit / buildx 报错 | **`unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD`** 后 **`DOCKER_BUILDKIT=0`** 再 `docker-compose ... build` |
+| `unknown shorthand flag: 'f'` | 可能用了错误的 compose 子命令；应使用 **`docker compose`**（V2 插件，中间有空格）或 **`docker-compose`**（仅在没有插件时的旧命令） |
+| `Recreating globuy-api … KeyError: 'ContainerConfig'`、`docker-compose==1.29.x` | **Compose V1（Python）与新版 Docker Engine 不兼容**。安装 V2：`sudo apt-get update && sudo apt-get install -y docker-compose-plugin`，用 **`docker compose`**（勿用旧 `docker-compose`）。删掉失败容器后重建：`docker rm -f globuy-api`，再在 voyage 根目录执行 **`bash deploy/aliyun/release-backend.sh`** |
+| 浏览器 **`502 Bad Gateway`**、`/api/` 全挂 | 多为 **后端容器未起来**（参见上一行）或 Nginx **`proxy_pass`** 端口不对；服务器上执行 **`docker ps`** 看是否有 **`globuy-api`**，`curl -sS http://127.0.0.1:8080/api/v1/tags` 能否通 |
+| BuildKit / buildx 报错 | **`unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD`** 后 **`DOCKER_BUILDKIT=0`** 再 **`docker compose`** / **`docker-compose`** … `build` |
 | Gradle 停在 `Daemon will be stopped...` 很久 | 见下文 **「Gradle 看似卡住」**；该行多半出现在**构建开头**，后面可能在静默拉依赖/编译 |
 | Workbench **第二个连接**失败：`SocketTimeoutException`、**建立远程连接失败**、`ecs-workbench-inner-share...` | 见下文 **「Workbench 限制」**；控制台 **分屏/新终端** 往往等于第二条通道 |
 | CORS 报错 | 检查 `APP_CORS_ALLOWED_ORIGINS` 是否包含浏览器地址栏里的 **完整 Origin**（含 `http://` 与端口） |
