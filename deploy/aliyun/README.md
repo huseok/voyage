@@ -1,6 +1,6 @@
 # 阿里云 Ubuntu 单机部署（文档在后端仓库 `voyage/deploy/aliyun`）
 
-**日常一键发版（可选）：** 请用 **`bash`** 执行（勿用 **`sh`**，Ubuntu 上常为 dash）。**`release.sh`**：默认 pull + 前端 build + Docker + nginx reload；另有 **`release-frontend.sh`**（只前端）、**`release-backend.sh`**（只后端），其余参数透传（如 **`--no-pull`**）。需要减轻构建期争抢可加 **`--stop-api-first`**。**后端默认「快速」**：宿主 **`./gradlew bootJar`** + **`Dockerfile.fast`**（需 **JDK 17+**）；未装 JDK 用 **`--backend-standard`** 或 **`BACKEND_BUILD_MODE=standard`**；依赖或镜像缓存可疑用 **`--backend-full`**。详见 **`bash release.sh --help`** 与 **[`DEPLOY_STEP_BY_STEP.md`](./DEPLOY_STEP_BY_STEP.md)**。
+**日常一键发版（可选）：** 请用 **`bash`** 执行（勿用 **`sh`**，Ubuntu 上常为 dash）。**`deploy/aliyun/release.sh`**：全量；**`release-frontend.sh`** / **`release-backend.sh`**：只前端 / 只后端。不想每次 **`cd deploy/aliyun`** 时，可用上一级 **`deploy/publish-frontend.sh`**、**`deploy/publish-backend.sh`**（任意目录执行，默认 **`VOYAGE_REPO=/opt/globuy/repo/voyage`**），或复制到 **`/opt/globuy/bin`** / **`sudo ln -sf … /usr/local/bin/globuy-backend`**。其余参数透传（如 **`--no-pull`**）。需要减轻构建期争抢可加 **`--stop-api-first`**。**后端默认「快速」**：宿主 **`./gradlew bootJar`** + **`Dockerfile.fast`**（需 **JDK 17+**）；未装 JDK 用 **`--backend-standard`** 或 **`BACKEND_BUILD_MODE=standard`**；依赖或镜像缓存可疑用 **`--backend-full`**。详见 **`bash release.sh --help`** 与 **[`DEPLOY_STEP_BY_STEP.md`](./DEPLOY_STEP_BY_STEP.md)**。
 
 **分步命令说明（推荐打印 / 收藏）：** [`DEPLOY_STEP_BY_STEP.md`](./DEPLOY_STEP_BY_STEP.md)
 
