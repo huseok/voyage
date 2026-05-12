@@ -29,6 +29,31 @@ class OrderEntity(
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     var totalAmount: BigDecimal,
 
+    /** 选中商品**折前**小计（不含会员/券/满减/运费）。 */
+    @Column(name = "subtotal_amount", nullable = false, precision = 12, scale = 2)
+    var subtotalAmount: BigDecimal = BigDecimal.ZERO,
+
+    @Column(name = "discount_member", nullable = false, precision = 12, scale = 2)
+    var discountMember: BigDecimal = BigDecimal.ZERO,
+
+    @Column(name = "discount_coupon", nullable = false, precision = 12, scale = 2)
+    var discountCoupon: BigDecimal = BigDecimal.ZERO,
+
+    @Column(name = "discount_promo", nullable = false, precision = 12, scale = 2)
+    var discountPromo: BigDecimal = BigDecimal.ZERO,
+
+    @Column(name = "shipping_fee", nullable = false, precision = 12, scale = 2)
+    var shippingFee: BigDecimal = BigDecimal.ZERO,
+
+    @Column(name = "coupon_code_snapshot", length = 64)
+    var couponCodeSnapshot: String? = null,
+
+    @Column(name = "paypal_order_id", length = 128)
+    var paypalOrderId: String? = null,
+
+    @Column(name = "payment_status", nullable = false, length = 32)
+    var paymentStatus: String = "UNPAID",
+
     @Column(nullable = false, length = 8)
     var currency: String = "USD",
 
@@ -50,6 +75,12 @@ class OrderEntity(
 
     @Column(name = "address_line", nullable = false, length = 255)
     var addressLine: String,
+
+    @Column(name = "receiver_province", length = 100)
+    var receiverProvince: String? = null,
+
+    @Column(name = "receiver_city", length = 100)
+    var receiverCity: String? = null,
 
     @Column(name = "postal_code", length = 20)
     var postalCode: String? = null,

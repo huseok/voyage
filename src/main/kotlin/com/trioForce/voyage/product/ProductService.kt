@@ -3,6 +3,7 @@ package com.trioForce.voyage.product
 import com.trioForce.voyage.audit.AuditLogEntity
 import com.trioForce.voyage.audit.AuditLogRepository
 import com.trioForce.voyage.common.BizException
+import com.trioForce.voyage.shipping.ShippingTemplateRepository
 import com.trioForce.voyage.tag.ProductTagEntity
 import com.trioForce.voyage.tag.ProductTagRepository
 import com.trioForce.voyage.tag.TagRepository
@@ -31,10 +32,14 @@ class ProductService(
     private val productTagRepository: ProductTagRepository,
     private val tagRepository: TagRepository,
     private val objectMapper: ObjectMapper,
-    private val auditLogRepository: AuditLogRepository
+    private val auditLogRepository: AuditLogRepository,
+    private val shippingTemplateRepository: ShippingTemplateRepository,
 ) {
     /**
      * 前台分页列表：仅上架；支持国家、分类与关键词（标题、SKU、ID）。
+     *
+     * @param minPrice 主档 [ProductEntity.price] 下限（含）；与 [maxPrice] 同时传入时须满足 min ≤ max，否则抛业务异常。
+     * @param maxPrice 主档售价上限（含）；任一端为 null 表示该端不限制。
      */
     fun listPublicPage(
         page: Int,
@@ -44,14 +49,17 @@ class ProductService(
         categoryId: Long?,
         tagId: Long?,
         promoOnly: Boolean,
+        minPrice: BigDecimal? = null,
+        maxPrice: BigDecimal? = null,
     ): PagedProducts {
         val pageable = PageRequest.of(clampPage(page), clampSize(size), Sort.by(Sort.Direction.DESC, "id"))
-        var spec: Specification<ProductEntity> = Specification.where(onlyActiveSpec())
+        var spec: Specification<ProductEntity> = onlyActiveSpec()
         countrySpec(country)?.let { spec = spec.and(it) }
         categorySpec(categoryId)?.let { spec = spec.and(it) }
         tagSpec(tagId)?.let { spec = spec.and(it) }
         querySpec(q)?.let { spec = spec.and(it) }
         if (promoOnly) spec = spec.and(promoProductSpec())
+        priceRangeSpec(minPrice, maxPrice)?.let { spec = spec.and(it) }
         val result = productRepository.findAll(spec, pageable)
         val ids = result.content.mapNotNull { it.id }
         val mediaByProduct = batchGalleryByProductId(ids)
@@ -89,7 +97,7 @@ class ProductService(
         currency: String? = null,
     ): PagedProducts {
         val pageable = PageRequest.of(clampPage(page), clampSize(size), Sort.by(Sort.Direction.DESC, "id"))
-        var spec: Specification<ProductEntity> = Specification.where(Specification { _, _, cb -> cb.conjunction() })
+        var spec: Specification<ProductEntity> = Specification { _, _, cb -> cb.conjunction() }
         activeFilter?.let { active ->
             spec = spec.and { root, _, cb -> cb.equal(root.get<Boolean>("isActive"), active) }
         }
@@ -128,6 +136,13 @@ class ProductService(
         return toProductView(entity, includeMatrix = true, tags = tags, exposeCost = true)
     }
 
+    private fun validateAdminPhysical(req: ProductAdminUpsertRequest) {
+        val w = req.weightKg ?: throw BizException("weightKg is required")
+        if (w.compareTo(BigDecimal.ZERO) <= 0) throw BizException("weightKg must be greater than 0")
+        val tid = req.shippingTemplateId ?: throw BizException("shippingTemplateId is required")
+        if (!shippingTemplateRepository.existsById(tid)) throw BizException("shipping template not found")
+    }
+
     /**
      * 查询前台商品详情（仅上架）；价格币种与列表一致，不要求登录。
      */
@@ -141,6 +156,7 @@ class ProductService(
 
     @Transactional
     fun create(req: ProductAdminUpsertRequest): Long {
+        validateAdminPhysical(req)
         val now = OffsetDateTime.now()
         val entity = productRepository.save(
             ProductEntity(
@@ -173,6 +189,7 @@ class ProductService(
 
     @Transactional
     fun update(id: Long, req: ProductAdminUpsertRequest) {
+        validateAdminPhysical(req)
         val entity = productRepository.findById(id).orElseThrow { BizException("product not found") }
         entity.title = req.title.trim()
         entity.price = req.price
@@ -445,6 +462,29 @@ class ProductService(
 
     private fun onlyActiveSpec(): Specification<ProductEntity> =
         Specification { root, _, cb -> cb.isTrue(root.get("isActive")) }
+
+    /**
+     * 前台列表：按主档售价 [ProductEntity.price] 做闭区间过滤。
+     * - 与活动价、SKU 价无关，仅过滤商品主价格字段，便于目录页「价格区间」筛选。
+     * - 两端皆空则返回 null（调用方不拼接该条件）。
+     */
+    private fun priceRangeSpec(minPrice: BigDecimal?, maxPrice: BigDecimal?): Specification<ProductEntity>? {
+        if (minPrice == null && maxPrice == null) return null
+        if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
+            throw BizException("minPrice must be <= maxPrice")
+        }
+        return Specification { root, _, cb ->
+            val price = root.get<BigDecimal>("price")
+            val ge = minPrice?.let { cb.greaterThanOrEqualTo(price, it) }
+            val le = maxPrice?.let { cb.lessThanOrEqualTo(price, it) }
+            when {
+                ge != null && le != null -> cb.and(ge, le)
+                ge != null -> ge
+                le != null -> le
+                else -> cb.conjunction()
+            }
+        }
+    }
 
     private fun countrySpec(country: String?): Specification<ProductEntity>? {
         if (country.isNullOrBlank()) return null

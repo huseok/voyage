@@ -25,6 +25,8 @@ class ProductController(
      * @param categoryId 可选，按后台分类 ID 精确筛选（与 Header 类目横条联动）
      * @param tagId 可选，按标签 ID 筛选（商品须关联该标签；仅上架）
      * @param promo `true` 时仅返回「活动商品」：已设置划线价且划线价高于主档售价
+     * @param minPrice 可选，主档售价 [price] 下限（含）；与币种一致的业务数据由运营保证，接口不做币种换算。
+     * @param maxPrice 可选，主档售价上限（含）；若同时传 min 与 max 且 min 大于 max，服务层返回业务错误。
      */
     @GetMapping("/api/v1/products")
     fun list(
@@ -35,6 +37,8 @@ class ProductController(
         @RequestParam(required = false) categoryId: Long?,
         @RequestParam(required = false) tagId: Long?,
         @RequestParam(required = false) promo: Boolean?,
+        @RequestParam(required = false) minPrice: java.math.BigDecimal?,
+        @RequestParam(required = false) maxPrice: java.math.BigDecimal?,
     ): ApiResponse<PagedProducts> =
         ok(
             productService.listPublicPage(
@@ -45,6 +49,8 @@ class ProductController(
                 categoryId,
                 tagId,
                 promo == true,
+                minPrice,
+                maxPrice,
             )
         )
 

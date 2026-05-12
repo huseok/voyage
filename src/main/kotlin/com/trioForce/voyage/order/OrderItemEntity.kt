@@ -28,6 +28,9 @@ class OrderItemEntity(
     @Column(nullable = false)
     var quantity: Int,
 
+    @Column(name = "thumb_url", length = 512)
+    var thumbUrl: String? = null,
+
     @Column(name = "created_at", nullable = false)
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
 

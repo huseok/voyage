@@ -24,6 +24,10 @@ class CartItemEntity(
     @Column(nullable = false)
     var quantity: Int,
 
+    /** 是否参与结算：前台购物车勾选；默认 true 兼容历史数据。 */
+    @Column(name = "selected", nullable = false)
+    var selected: Boolean = true,
+
     @Column(name = "created_at", nullable = false)
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
 

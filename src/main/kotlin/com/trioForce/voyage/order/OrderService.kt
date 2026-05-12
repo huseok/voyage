@@ -2,17 +2,24 @@ package com.trioForce.voyage.order
 
 import com.trioForce.voyage.audit.OrderStatusHistoryEntity
 import com.trioForce.voyage.audit.OrderStatusHistoryRepository
+import com.trioForce.voyage.cart.CartItemEntity
 import com.trioForce.voyage.cart.CartItemRepository
 import com.trioForce.voyage.common.BizException
 import com.trioForce.voyage.dictionary.DictionaryService
+import com.trioForce.voyage.loyalty.MembershipService
+import com.trioForce.voyage.marketing.MarketingService
+import com.trioForce.voyage.product.ProductEntity
+import com.trioForce.voyage.product.ProductMediaRepository
 import com.trioForce.voyage.product.ProductRepository
 import com.trioForce.voyage.security.CurrentUser
+import com.trioForce.voyage.usercenter.UserAddressRepository
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.data.jpa.domain.Specification
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.ThreadLocalRandom
@@ -27,30 +34,63 @@ class OrderService(
     private val orderItemRepository: OrderItemRepository,
     private val cartItemRepository: CartItemRepository,
     private val productRepository: ProductRepository,
+    private val productMediaRepository: ProductMediaRepository,
     private val orderStatusHistoryRepository: OrderStatusHistoryRepository,
-    private val dictionaryService: DictionaryService
+    private val dictionaryService: DictionaryService,
+    private val marketingService: MarketingService,
+    private val membershipService: MembershipService,
+    private val userAddressRepository: UserAddressRepository,
 ) {
     /**
-     * 从购物车创建订单，并清空购物车。
-     *
-     * @param req 收货与贸易参数
-     * @return 新订单号
+     * 从购物车创建订单：仅处理 **已勾选** 行；可选 [CreateOrderRequest.cartItemIds] 再收窄行集合。
+     * 金额：商品小计 → 会员折扣 → 满减 → 优惠券 → 加运费（当前运费恒为 0，占位后续模板）。
+     * 成功后删除对应购物车行。
      */
     @Transactional
     fun createOrder(req: CreateOrderRequest): String {
         val userId = CurrentUser.userId()
-        val cartItems = cartItemRepository.findAllByUserId(userId)
-        if (cartItems.isEmpty()) throw BizException("cart is empty")
-
-        var total = BigDecimal.ZERO
-        var currency = "USD"
-        val snapshots = cartItems.map {
-            val product = productRepository.findById(it.productId).orElseThrow { BizException("product not found: ${it.productId}") }
-            val lineAmount = product.price.multiply(BigDecimal.valueOf(it.quantity.toLong()))
-            total = total.add(lineAmount)
-            currency = product.currency
-            Triple(it, product, lineAmount)
+        val ship = resolveShipping(req, userId)
+        var rows = cartItemRepository.findAllByUserId(userId).filter { it.selected }
+        val idFilter = req.cartItemIds?.filter { it > 0 }?.toSet()
+        if (idFilter != null && idFilter.isNotEmpty()) {
+            rows = rows.filter { it.id != null && idFilter.contains(it.id) }
         }
+        if (rows.isEmpty()) throw BizException("no items selected for checkout")
+
+        val productIdSet = rows.map { it.productId }.toSet()
+        val thumbsByProduct = productMediaRepository.findAllByProductIdIn(productIdSet)
+            .groupBy { it.productId }
+            .mapValues { (_, list) -> list.minByOrNull { it.sortNo } ?: list.first() }
+
+        data class LineSnap(val cart: CartItemEntity, val product: ProductEntity, val lineAmount: BigDecimal, val thumbUrl: String?)
+
+        val snaps = rows.map { row ->
+            val product = productRepository.findById(row.productId).orElseThrow { BizException("product not found: ${row.productId}") }
+            if (!product.isActive) throw BizException("product inactive: ${row.productId}")
+            val line = product.price.multiply(BigDecimal.valueOf(row.quantity.toLong()))
+            LineSnap(row, product, line, thumbsByProduct[row.productId]?.thumbUrl)
+        }
+
+        var currency = "USD"
+        var subtotal = BigDecimal.ZERO
+        for (s in snaps) {
+            subtotal = subtotal.add(s.lineAmount)
+            currency = s.product.currency
+        }
+
+        val tier = membershipService.getOrCreate(userId).tier
+        val discountMember = membershipService.memberDiscountAmount(tier, subtotal)
+        val discountPromo = marketingService.computeBestPromotionOff(subtotal, productIdSet)
+        val afterMemberPromo = subtotal.subtract(discountMember).subtract(discountPromo).max(BigDecimal.ZERO)
+        val (discountCoupon, couponSnap) = marketingService.computeCouponOff(
+            req.couponCode,
+            goodsSubtotalForMin = subtotal,
+            applyBase = afterMemberPromo,
+            productIds = productIdSet,
+        )
+        val shippingFee = BigDecimal.ZERO
+        val payable = afterMemberPromo.subtract(discountCoupon).add(shippingFee).max(BigDecimal.ZERO)
+            .setScale(2, RoundingMode.HALF_UP)
 
         val now = OffsetDateTime.now()
         val orderNo = generateOrderNo()
@@ -59,39 +99,49 @@ class OrderService(
                 orderNo = orderNo,
                 userId = userId,
                 status = "PENDING_PAYMENT",
-                totalAmount = total,
+                totalAmount = payable,
+                subtotalAmount = subtotal,
+                discountMember = discountMember,
+                discountCoupon = discountCoupon,
+                discountPromo = discountPromo,
+                shippingFee = shippingFee,
+                couponCodeSnapshot = couponSnap,
+                paypalOrderId = null,
+                paymentStatus = "UNPAID",
                 currency = currency,
-                receiverName = req.receiverName.trim(),
-                receiverPhone = req.receiverPhone.trim(),
-                receiverCompany = req.receiverCompany?.trim(),
+                receiverName = ship.receiverName,
+                receiverPhone = ship.receiverPhone,
+                receiverCompany = ship.receiverCompany,
                 taxNo = req.taxNo?.trim(),
-                country = req.country.trim(),
-                addressLine = req.addressLine.trim(),
-                postalCode = req.postalCode?.trim(),
+                country = ship.country,
+                addressLine = ship.addressLine,
+                receiverProvince = ship.receiverProvince,
+                receiverCity = ship.receiverCity,
+                postalCode = ship.postalCode,
                 incoterm = req.incoterm?.trim()?.uppercase(),
                 shippingMethod = req.shippingMethod?.trim(),
                 createdAt = now,
-                updatedAt = now
-            )
+                updatedAt = now,
+            ),
         )
-        // 记录初始状态，便于后台追踪订单生命周期。
         appendStatusHistory(order.id!!, null, "PENDING_PAYMENT", "create order")
 
         orderItemRepository.saveAll(
-            snapshots.map {
+            snaps.map { s ->
                 OrderItemEntity(
                     orderId = order.id!!,
-                    productId = it.second.id!!,
-                    titleSnapshot = it.second.title,
-                    priceSnapshot = it.second.price,
-                    quantity = it.first.quantity,
-                    createdAt = now
+                    productId = s.product.id!!,
+                    titleSnapshot = s.product.title,
+                    priceSnapshot = s.product.price,
+                    quantity = s.cart.quantity,
+                    thumbUrl = s.thumbUrl,
+                    createdAt = now,
+                    updatedAt = now,
                 )
-            }
+            },
         )
 
-        // 下单后清空购物车，避免重复下单
-        cartItemRepository.deleteAll(cartItems)
+        cartItemRepository.deleteAll(snaps.map { it.cart })
         return orderNo
     }
 
@@ -181,6 +231,7 @@ class OrderService(
         val fromStatus = order.status
         order.status = next
         order.updatedAt = OffsetDateTime.now()
+        onBecamePaid(order, fromStatus)
         orderRepository.save(order)
         appendStatusHistory(order.id!!, fromStatus, next, remark?.trim().takeUnless { it.isNullOrBlank() } ?: "admin update status")
     }
@@ -199,6 +250,7 @@ class OrderService(
         val fromStatus = order.status
         order.status = next
         order.updatedAt = OffsetDateTime.now()
+        onBecamePaid(order, fromStatus)
         orderRepository.save(order)
         appendStatusHistory(order.id!!, fromStatus, next, remark?.trim().takeUnless { it.isNullOrBlank() } ?: "flow next")
     }
@@ -219,6 +271,51 @@ class OrderService(
         order.updatedAt = OffsetDateTime.now()
         orderRepository.save(order)
         appendStatusHistory(order.id!!, fromStatus, "COMPLETED", "confirm completed")
+    }
+
+    private data class ResolvedShipping(
+        val receiverName: String,
+        val receiverPhone: String,
+        val receiverCompany: String?,
+        val country: String,
+        val addressLine: String,
+        val receiverProvince: String?,
+        val receiverCity: String?,
+        val postalCode: String?,
+    )
+
+    private fun resolveShipping(req: CreateOrderRequest, userId: Long): ResolvedShipping {
+        if (req.savedAddressId != null) {
+            val addr = userAddressRepository.findActiveByIdAndUserId(req.savedAddressId, userId)
+                ?: throw BizException("address not found")
+            return ResolvedShipping(
+                receiverName = addr.receiverName,
+                receiverPhone = addr.receiverPhone,
+                receiverCompany = addr.receiverCompany?.takeUnless { it.isBlank() },
+                country = addr.country,
+                addressLine = addr.addressLine,
+                receiverProvince = addr.province?.takeUnless { it.isBlank() },
+                receiverCity = addr.city?.takeUnless { it.isBlank() },
+                postalCode = addr.postalCode?.takeUnless { it.isBlank() },
+            )
+        }
+        val rn = req.receiverName?.trim().orEmpty()
+        val rp = req.receiverPhone?.trim().orEmpty()
+        val c = req.country?.trim().orEmpty()
+        val al = req.addressLine?.trim().orEmpty()
+        if (rn.isEmpty() || rp.isEmpty() || c.isEmpty() || al.isEmpty()) {
+            throw BizException("receiver, phone, country and address are required")
+        }
+        return ResolvedShipping(
+            receiverName = rn,
+            receiverPhone = rp,
+            receiverCompany = req.receiverCompany?.trim()?.takeUnless { it.isEmpty() },
+            country = c,
+            addressLine = al,
+            receiverProvince = req.receiverProvince?.trim()?.takeUnless { it.isEmpty() },
+            receiverCity = req.receiverCity?.trim()?.takeUnless { it.isEmpty() },
+            postalCode = req.postalCode?.trim(),
+        )
     }
 
     private fun appendStatusHistory(orderId: Long, from: String?, to: String, remark: String) {
@@ -271,19 +368,34 @@ class OrderService(
 
     private fun clampOrderSize(size: Int): Int = size.coerceIn(1, 100)
 
+    private fun onBecamePaid(order: OrderEntity, previousStatus: String) {
+        if (order.status != "PAID" || previousStatus == "PAID") return
+        order.paymentStatus = "PAID"
+        membershipService.accumulateAfterOrderPaid(order.userId, order.totalAmount)
+    }
+
     private fun toView(order: OrderEntity): OrderView {
         val items = orderItemRepository.findAllByOrderId(order.id!!).map {
             OrderItemView(
                 productId = it.productId,
                 titleSnapshot = it.titleSnapshot,
                 priceSnapshot = it.priceSnapshot.toPlainString(),
-                quantity = it.quantity
+                quantity = it.quantity,
+                thumbUrl = it.thumbUrl,
             )
         }
         return OrderView(
             orderNo = order.orderNo,
             status = order.status,
+            paymentStatus = order.paymentStatus,
             totalAmount = order.totalAmount.toPlainString(),
+            subtotalAmount = order.subtotalAmount.toPlainString(),
+            discountMember = order.discountMember.toPlainString(),
+            discountPromo = order.discountPromo.toPlainString(),
+            discountCoupon = order.discountCoupon.toPlainString(),
+            shippingFee = order.shippingFee.toPlainString(),
+            couponCodeSnapshot = order.couponCodeSnapshot,
+            paypalOrderId = order.paypalOrderId,
             currency = order.currency,
             receiverName = order.receiverName,
             receiverPhone = order.receiverPhone,
@@ -291,12 +403,14 @@ class OrderService(
             taxNo = order.taxNo,
             country = order.country,
             addressLine = order.addressLine,
+            receiverProvince = order.receiverProvince,
+            receiverCity = order.receiverCity,
             postalCode = order.postalCode,
             incoterm = order.incoterm,
             shippingMethod = order.shippingMethod,
             logisticsCompany = order.logisticsCompany,
             trackingNo = order.trackingNo,
-            items = items
+            items = items,
         )
     }
 
