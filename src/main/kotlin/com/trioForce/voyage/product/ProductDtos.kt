@@ -43,7 +43,8 @@ data class ProductAdminUpsertRequest(
 )
 
 data class ProductView(
-    val id: Long,
+    /** 对外雪花 ID（十进制字符串） */
+    val id: String,
     val title: String,
     val moq: Int,
     val description: String?,
@@ -109,13 +110,13 @@ data class ProductSkuMatrixUpsertRequest(
 )
 
 data class ProductSkuMatrixView(
-    val productId: Long,
+    val productId: String,
     val options: List<ProductOptionView>,
     val skus: List<ProductSkuView>
 )
 
 data class ProductBulkStatusRequest(
-    val ids: List<Long>,
+    val ids: List<String>,
     val isActive: Boolean
 )
 

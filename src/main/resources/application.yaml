@@ -39,9 +39,14 @@ logging:
     org.hibernate.SQL: debug
 
 voyage:
+  snowflake:
+    worker-id: ${VOYAGE_SNOWFLAKE_WORKER_ID:1}
+    datacenter-id: ${VOYAGE_SNOWFLAKE_DATACENTER_ID:1}
   storefront:
     # 首页活动商品轮播使用的标签编码（覆盖环境变量 VOYAGE_STOREFRONT_HOME_PROMO_ZONE_TAG_CODE）
     home-promo-zone-tag-code: ${VOYAGE_STOREFRONT_HOME_PROMO_ZONE_TAG_CODE:HOME_PROMO}
+    home-featured-tag-code: ${VOYAGE_STOREFRONT_HOME_FEATURED_TAG_CODE:}
+    home-hot-tag-code: ${VOYAGE_STOREFRONT_HOME_HOT_TAG_CODE:}
   media:
     # 上传文件落盘目录（生产请改为绝对路径并确保进程可写）
     storage-root: ${VOYAGE_MEDIA_STORAGE_ROOT:./data/media}

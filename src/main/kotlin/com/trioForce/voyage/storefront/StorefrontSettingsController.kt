@@ -19,6 +19,8 @@ class StorefrontSettingsController(
         ok(
             StorefrontSettingsView(
                 homePromoZoneTagCode = storefrontProperties.homePromoZoneTagCode.trim().uppercase(),
+                homeFeaturedTagCode = storefrontProperties.homeFeaturedTagCode.trim().uppercase(),
+                homeHotTagCode = storefrontProperties.homeHotTagCode.trim().uppercase(),
             ),
         )
 }

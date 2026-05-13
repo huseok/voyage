@@ -1,0 +1,1 @@
+ALTER TABLE t_products ALTER COLUMN public_id SET NOT NULL;

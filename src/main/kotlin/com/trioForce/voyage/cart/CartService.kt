@@ -3,6 +3,7 @@ package com.trioForce.voyage.cart
 import com.trioForce.voyage.common.BizException
 import com.trioForce.voyage.order.OrderItemRepository
 import com.trioForce.voyage.order.OrderRepository
+import com.trioForce.voyage.product.ProductLookup
 import com.trioForce.voyage.product.ProductMediaRepository
 import com.trioForce.voyage.product.ProductRepository
 import com.trioForce.voyage.security.CurrentUser
@@ -20,6 +21,7 @@ import java.time.OffsetDateTime
 class CartService(
     private val cartItemRepository: CartItemRepository,
     private val productRepository: ProductRepository,
+    private val productLookup: ProductLookup,
     private val productMediaRepository: ProductMediaRepository,
     private val orderRepository: OrderRepository,
     private val orderItemRepository: OrderItemRepository,
@@ -47,7 +49,7 @@ class CartService(
             val media = thumbsByProduct[row.productId]
             CartItemView(
                 itemId = row.id!!,
-                productId = row.productId,
+                productId = product.publicId,
                 title = product.title,
                 moq = product.moq,
                 quantity = row.quantity,
@@ -66,12 +68,13 @@ class CartService(
     @Transactional
     fun addItem(req: AddCartItemRequest) {
         val userId = CurrentUser.userId()
-        val product = productRepository.findById(req.productId).orElseThrow { BizException("product not found") }
+        val product = productLookup.requireEntityByClientKey(req.productId)
+        val internalPid = product.id!!
         if (!product.isActive) throw BizException("product inactive")
         if (req.quantity < product.moq) throw BizException("quantity must >= moq ${product.moq}")
 
         val now = OffsetDateTime.now()
-        val exists = cartItemRepository.findByUserIdAndProductId(userId, req.productId).orElse(null)
+        val exists = cartItemRepository.findByUserIdAndProductId(userId, internalPid).orElse(null)
         if (exists != null) {
             exists.quantity += req.quantity
             exists.updatedAt = now
@@ -82,7 +85,7 @@ class CartService(
         cartItemRepository.save(
             CartItemEntity(
                 userId = userId,
-                productId = req.productId,
+                productId = internalPid,
                 quantity = req.quantity,
                 selected = true,
                 createdAt = now,
@@ -154,7 +157,7 @@ class CartService(
             val product = productRepository.findById(line.productId).orElse(null) ?: continue
             if (!product.isActive) continue
             val qty = maxOf(line.quantity, product.moq)
-            addItem(AddCartItemRequest(productId = line.productId, quantity = qty))
+            addItem(AddCartItemRequest(productId = product.publicId, quantity = qty))
         }
     }
 }

@@ -6,11 +6,13 @@ import com.trioForce.voyage.common.ok
 import jakarta.persistence.*
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
 import java.time.OffsetDateTime
+import java.util.Optional
 
 /**
  * 商品标签模块：
@@ -55,6 +57,8 @@ interface TagRepository : JpaRepository<TagEntity, Long> {
 
     /** 前台筛选用：仅返回启用标签，排序一致 */
     fun findAllByIsActiveIsTrueOrderBySortNoAscIdAsc(): List<TagEntity>
+
+    fun findByCode(code: String): Optional<TagEntity>
 }
 
 interface ProductTagRepository : JpaRepository<ProductTagEntity, Long> {
@@ -72,7 +76,9 @@ data class TagView(
 )
 
 data class TagUpsertRequest(
-    @field:NotBlank val code: String,
+    @field:NotBlank
+    @field:Pattern(regexp = "^[A-Za-z0-9][A-Za-z0-9_-]{1,62}$", message = "tag code: 2-64 chars, letters, digits, _ or -")
+    val code: String,
     @field:NotBlank val name: String,
     val sortNo: Int = 0,
     val isActive: Boolean = true,
@@ -113,7 +119,10 @@ class TagService(
     @Transactional
     fun update(id: Long, req: TagUpsertRequest) {
         val entity = tagRepository.findById(id).orElseThrow { BizException("tag not found") }
-        entity.code = req.code.trim().uppercase()
+        val newCode = req.code.trim().uppercase()
+        if (entity.code != newCode) {
+            throw BizException("tag code cannot be changed")
+        }
         entity.name = req.name.trim()
         entity.sortNo = req.sortNo
         entity.isActive = req.isActive

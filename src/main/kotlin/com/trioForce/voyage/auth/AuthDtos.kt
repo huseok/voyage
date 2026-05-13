@@ -24,6 +24,8 @@ data class RegisterRequest(
     @field:Email @field:NotBlank val email: String,
     @field:NotBlank @field:Size(min = 6, max = 64) val password: String,
     @field:NotBlank val name: String,
+    /** 称呼：如先生/女士/职务等，与 [name] 区分 */
+    @field:NotBlank val salutation: String,
     val phone: String? = null,
     val country: String? = null,
     /** 与 `GET /api/v1/auth/captcha` 返回的 `captchaId` 完全一致。 */
@@ -52,4 +54,10 @@ data class LoginResponse(
 data class RefreshTokenRequest(
     @field:NotBlank val refreshToken: String
 )
-data class MeResponse(val id: Long, val email: String, val name: String, val role: String)
+data class MeResponse(
+    val id: Long,
+    val email: String,
+    val name: String,
+    val salutation: String,
+    val role: String,
+)

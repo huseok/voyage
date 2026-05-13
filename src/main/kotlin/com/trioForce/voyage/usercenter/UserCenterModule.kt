@@ -9,6 +9,8 @@ package com.trioForce.voyage.usercenter
 import com.trioForce.voyage.common.ApiResponse
 import com.trioForce.voyage.common.BizException
 import com.trioForce.voyage.common.ok
+import com.trioForce.voyage.product.ProductLookup
+import com.trioForce.voyage.product.ProductRepository
 import com.trioForce.voyage.security.CurrentUser
 import jakarta.persistence.*
 import jakarta.validation.Valid
@@ -140,13 +142,15 @@ data class UserAddressView(
     val isDefault: Boolean,
 )
 
-data class BrowseHistoryCreateRequest(val productId: Long)
-data class BrowseHistoryView(val id: Long, val productId: Long, val viewedAt: OffsetDateTime)
+data class BrowseHistoryCreateRequest(val productId: String)
+data class BrowseHistoryView(val id: Long, val productId: String, val viewedAt: OffsetDateTime)
 
 @Service
 class UserCenterService(
     private val addressRepository: UserAddressRepository,
-    private val browseHistoryRepository: BrowseHistoryRepository
+    private val browseHistoryRepository: BrowseHistoryRepository,
+    private val productRepository: ProductRepository,
+    private val productLookup: ProductLookup,
 ) {
     fun listAddresses(): List<UserAddressView> = addressRepository.findAllByUserIdOrderByIsDefaultDescIdDesc(CurrentUser.userId()).map {
         UserAddressView(
@@ -251,20 +255,26 @@ class UserCenterService(
         addressRepository.save(row)
     }
 
-    fun listBrowseHistories(): List<BrowseHistoryView> =
-        browseHistoryRepository.findAllByUserIdOrderByViewedAtDesc(CurrentUser.userId()).map {
-            BrowseHistoryView(it.id!!, it.productId, it.viewedAt)
+    fun listBrowseHistories(): List<BrowseHistoryView> {
+        val rows = browseHistoryRepository.findAllByUserIdOrderByViewedAtDesc(CurrentUser.userId())
+        val ids = rows.map { it.productId }.toSet()
+        val pub = productRepository.findAllById(ids).associate { it.id!! to it.publicId }
+        return rows.map {
+            BrowseHistoryView(it.id!!, pub[it.productId] ?: it.productId.toString(), it.viewedAt)
         }
+    }
 
     @Transactional
-    fun addBrowseHistory(req: BrowseHistoryCreateRequest): Long =
-        browseHistoryRepository.save(
+    fun addBrowseHistory(req: BrowseHistoryCreateRequest): Long {
+        val p = productLookup.requireEntityByClientKey(req.productId)
+        return browseHistoryRepository.save(
             BrowseHistoryEntity(
                 userId = CurrentUser.userId(),
-                productId = req.productId,
+                productId = p.id!!,
                 viewedAt = OffsetDateTime.now()
             )
         ).id!!
+    }
 }
 
 @RestController

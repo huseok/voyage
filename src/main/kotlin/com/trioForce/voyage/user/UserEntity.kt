@@ -22,6 +22,16 @@ class UserEntity(
     @Column(nullable = false, length = 100)
     var name: String,
 
+    /** 用户称呼（注册必填）；历史数据可能为空串 */
+    @Column(nullable = false, length = 80)
+    var salutation: String = "",
+
+    @Column(name = "admin_note", columnDefinition = "text")
+    var adminNote: String? = null,
+
+    @Column(columnDefinition = "text")
+    var preferences: String? = null,
+
     @Column(length = 30)
     var phone: String? = null,
 

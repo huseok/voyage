@@ -21,9 +21,10 @@ class ProductController(
      * @param page 页码，从 0 开始
      * @param size 每页条数，最大 100
      * @param country 可选，按原产国精确匹配（不区分大小写）
-     * @param q 可选，标题 / SKU / ID 模糊或精确匹配
+     * @param q 可选，标题 / SKU / publicId / 旧数字 id 模糊或精确匹配
      * @param categoryId 可选，按后台分类 ID 精确筛选（与 Header 类目横条联动）
-     * @param tagId 可选，按标签 ID 筛选（商品须关联该标签；仅上架）
+     * @param tagId 可选，按标签 ID 筛选（已废弃，请用 tagCode）
+     * @param tagCode 可选，按标签编码筛选（与标签管理 code 一致）
      * @param promo `true` 时仅返回「活动商品」：已设置划线价且划线价高于主档售价
      * @param minPrice 可选，主档售价 [price] 下限（含）；与币种一致的业务数据由运营保证，接口不做币种换算。
      * @param maxPrice 可选，主档售价上限（含）；若同时传 min 与 max 且 min 大于 max，服务层返回业务错误。
@@ -36,6 +37,7 @@ class ProductController(
         @RequestParam(required = false) q: String?,
         @RequestParam(required = false) categoryId: Long?,
         @RequestParam(required = false) tagId: Long?,
+        @RequestParam(required = false) tagCode: String?,
         @RequestParam(required = false) promo: Boolean?,
         @RequestParam(required = false) minPrice: java.math.BigDecimal?,
         @RequestParam(required = false) maxPrice: java.math.BigDecimal?,
@@ -48,6 +50,7 @@ class ProductController(
                 q,
                 categoryId,
                 tagId,
+                tagCode,
                 promo == true,
                 minPrice,
                 maxPrice,
@@ -55,10 +58,10 @@ class ProductController(
         )
 
     /**
-     * 前台商品详情（仅上架）。
+     * 前台商品详情（仅上架）。路径 id 为 [ProductEntity.publicId] 雪花字符串。
      */
     @GetMapping("/api/v1/products/{id}")
-    fun detail(@PathVariable id: Long): ApiResponse<ProductView> =
+    fun detail(@PathVariable id: String): ApiResponse<ProductView> =
         ok(productService.detailPublic(id))
 
     /**
@@ -74,6 +77,7 @@ class ProductController(
         @RequestParam(required = false) active: String?,
         @RequestParam(required = false) categoryId: Long?,
         @RequestParam(required = false) tagId: Long?,
+        @RequestParam(required = false) tagCode: String?,
         @RequestParam(required = false) currency: String?,
     ): ApiResponse<PagedProducts> =
         ok(
@@ -84,6 +88,7 @@ class ProductController(
                 parseActiveFilter(active),
                 categoryId,
                 tagId,
+                tagCode,
                 currency,
             )
         )
@@ -92,21 +97,21 @@ class ProductController(
      * 管理端商品详情（含下架），用于编辑页加载。
      */
     @GetMapping("/api/v1/admin/products/{id}")
-    fun adminDetail(@PathVariable id: Long): ApiResponse<ProductView> =
+    fun adminDetail(@PathVariable id: String): ApiResponse<ProductView> =
         ok(productService.adminDetail(id))
 
     /**
      * 后台创建商品。
      */
     @PostMapping("/api/v1/admin/products")
-    fun create(@Valid @RequestBody req: ProductAdminUpsertRequest): ApiResponse<Map<String, Long>> =
+    fun create(@Valid @RequestBody req: ProductAdminUpsertRequest): ApiResponse<Map<String, String>> =
         ok(mapOf("id" to productService.create(req)))
 
     /**
      * 后台更新商品。
      */
     @PutMapping("/api/v1/admin/products/{id}")
-    fun update(@PathVariable id: Long, @Valid @RequestBody req: ProductAdminUpsertRequest): ApiResponse<String> {
+    fun update(@PathVariable id: String, @Valid @RequestBody req: ProductAdminUpsertRequest): ApiResponse<String> {
         productService.update(id, req)
         return ok("updated")
     }
@@ -122,13 +127,13 @@ class ProductController(
      * 后台获取商品 SKU 规格矩阵。
      */
     @GetMapping("/api/v1/admin/products/{id}/sku-matrix")
-    fun getSkuMatrix(@PathVariable id: Long): ApiResponse<ProductSkuMatrixView> = ok(productService.getSkuMatrix(id))
+    fun getSkuMatrix(@PathVariable id: String): ApiResponse<ProductSkuMatrixView> = ok(productService.getSkuMatrix(id))
 
     /**
      * 后台保存商品 SKU 规格矩阵（全量覆盖）。
      */
     @PutMapping("/api/v1/admin/products/{id}/sku-matrix")
-    fun upsertSkuMatrix(@PathVariable id: Long, @Valid @RequestBody req: ProductSkuMatrixUpsertRequest): ApiResponse<String> {
+    fun upsertSkuMatrix(@PathVariable id: String, @Valid @RequestBody req: ProductSkuMatrixUpsertRequest): ApiResponse<String> {
         productService.upsertSkuMatrix(id, req)
         return ok("updated")
     }

@@ -3,6 +3,7 @@ package com.trioForce.voyage.product
 import com.trioForce.voyage.audit.AuditLogEntity
 import com.trioForce.voyage.audit.AuditLogRepository
 import com.trioForce.voyage.common.BizException
+import com.trioForce.voyage.common.snowflake.SnowflakeIdGenerator
 import com.trioForce.voyage.shipping.ShippingTemplateRepository
 import com.trioForce.voyage.tag.ProductTagEntity
 import com.trioForce.voyage.tag.ProductTagRepository
@@ -34,6 +35,8 @@ class ProductService(
     private val objectMapper: ObjectMapper,
     private val auditLogRepository: AuditLogRepository,
     private val shippingTemplateRepository: ShippingTemplateRepository,
+    private val snowflakeIdGenerator: SnowflakeIdGenerator,
+    private val productLookup: ProductLookup,
 ) {
     /**
      * 前台分页列表：仅上架；支持国家、分类与关键词（标题、SKU、ID）。
@@ -48,6 +51,7 @@ class ProductService(
         q: String?,
         categoryId: Long?,
         tagId: Long?,
+        tagCode: String?,
         promoOnly: Boolean,
         minPrice: BigDecimal? = null,
         maxPrice: BigDecimal? = null,
@@ -56,7 +60,11 @@ class ProductService(
         var spec: Specification<ProductEntity> = onlyActiveSpec()
         countrySpec(country)?.let { spec = spec.and(it) }
         categorySpec(categoryId)?.let { spec = spec.and(it) }
-        tagSpec(tagId)?.let { spec = spec.and(it) }
+        when (val rt = resolveTagFilter(tagId, tagCode)) {
+            TagFilter.MissingCode -> spec = spec.and { _, _, cb -> cb.equal(cb.literal(1), 0) }
+            is TagFilter.ById -> tagSpec(rt.id)?.let { spec = spec.and(it) }
+            TagFilter.None -> {}
+        }
         querySpec(q)?.let { spec = spec.and(it) }
         if (promoOnly) spec = spec.and(promoProductSpec())
         priceRangeSpec(minPrice, maxPrice)?.let { spec = spec.and(it) }
@@ -94,6 +102,7 @@ class ProductService(
         activeFilter: Boolean?,
         categoryId: Long? = null,
         tagId: Long? = null,
+        tagCode: String? = null,
         currency: String? = null,
     ): PagedProducts {
         val pageable = PageRequest.of(clampPage(page), clampSize(size), Sort.by(Sort.Direction.DESC, "id"))
@@ -102,7 +111,11 @@ class ProductService(
             spec = spec.and { root, _, cb -> cb.equal(root.get<Boolean>("isActive"), active) }
         }
         categorySpec(categoryId)?.let { spec = spec.and(it) }
-        tagSpec(tagId)?.let { spec = spec.and(it) }
+        when (val rt = resolveTagFilter(tagId, tagCode)) {
+            TagFilter.MissingCode -> spec = spec.and { _, _, cb -> cb.equal(cb.literal(1), 0) }
+            is TagFilter.ById -> tagSpec(rt.id)?.let { spec = spec.and(it) }
+            TagFilter.None -> {}
+        }
         adminCurrencySpec(currency)?.let { spec = spec.and(it) }
         querySpec(q)?.let { spec = spec.and(it) }
         val result = productRepository.findAll(spec, pageable)
@@ -129,8 +142,8 @@ class ProductService(
     /**
      * 管理端详情：含下架商品。
      */
-    fun adminDetail(id: Long): ProductView {
-        val entity = productRepository.findById(id).orElseThrow { BizException("product not found") }
+    fun adminDetail(clientProductKey: String): ProductView {
+        val entity = productLookup.requireEntityByClientKey(clientProductKey)
         val pid = entity.id!!
         val tags = batchTagsByProductId(listOf(pid))[pid] ?: emptyList()
         return toProductView(entity, includeMatrix = true, tags = tags, exposeCost = true)
@@ -146,8 +159,8 @@ class ProductService(
     /**
      * 查询前台商品详情（仅上架）；价格币种与列表一致，不要求登录。
      */
-    fun detailPublic(id: Long): ProductView {
-        val it = productRepository.findById(id).orElseThrow { BizException("product not found") }
+    fun detailPublic(clientProductKey: String): ProductView {
+        val it = productLookup.requireEntityByClientKey(clientProductKey)
         if (!it.isActive) throw BizException("product not found")
         val pid = it.id!!
         val tags = batchTagsByProductId(listOf(pid))[pid] ?: emptyList()
@@ -155,11 +168,14 @@ class ProductService(
     }
 
     @Transactional
-    fun create(req: ProductAdminUpsertRequest): Long {
+    fun create(req: ProductAdminUpsertRequest): String {
         validateAdminPhysical(req)
         val now = OffsetDateTime.now()
+        val publicId = snowflakeIdGenerator.nextIdString()
         val entity = productRepository.save(
             ProductEntity(
+                id = null,
+                publicId = publicId,
                 title = req.title.trim(),
                 price = req.price,
                 listPrice = normalizeListPrice(req.listPrice, req.price),
@@ -184,13 +200,14 @@ class ProductService(
         val id = entity.id!!
         syncProductMedia(id, req.images)
         syncProductTags(id, req.tagIds)
-        return id
+        return publicId
     }
 
     @Transactional
-    fun update(id: Long, req: ProductAdminUpsertRequest) {
+    fun update(clientProductKey: String, req: ProductAdminUpsertRequest) {
         validateAdminPhysical(req)
-        val entity = productRepository.findById(id).orElseThrow { BizException("product not found") }
+        val entity = productLookup.requireEntityByClientKey(clientProductKey)
+        val id = entity.id!!
         entity.title = req.title.trim()
         entity.price = req.price
         entity.listPrice = normalizeListPrice(req.listPrice, req.price)
@@ -216,9 +233,9 @@ class ProductService(
 
     @Transactional
     /** 后台批量更新商品上下架状态。 */
-    fun bulkUpdateStatus(ids: List<Long>, isActive: Boolean): Int {
-        if (ids.isEmpty()) return 0
-        val rows = productRepository.findAllById(ids)
+    fun bulkUpdateStatus(publicIds: List<String>, isActive: Boolean): Int {
+        if (publicIds.isEmpty()) return 0
+        val rows = publicIds.map { productLookup.requireEntityByClientKey(it) }
         val now = OffsetDateTime.now()
         rows.forEach {
             it.isActive = isActive
@@ -231,7 +248,7 @@ class ProductService(
                 actorRole = "ADMIN",
                 actionCode = if (isActive) "PRODUCT_BULK_ON_SHELF" else "PRODUCT_BULK_OFF_SHELF",
                 entityType = "PRODUCT",
-                entityId = rows.joinToString(",") { it.id.toString() },
+                entityId = rows.joinToString(",") { it.publicId },
                 detailJson = """{"count":${rows.size},"targetStatus":$isActive}""",
                 createdAt = now
             )
@@ -239,20 +256,22 @@ class ProductService(
         return rows.size
     }
 
-    fun getSkuMatrix(productId: Long): ProductSkuMatrixView {
-        productRepository.findById(productId).orElseThrow { BizException("product not found") }
+    fun getSkuMatrix(clientProductKey: String): ProductSkuMatrixView {
+        val entity = productLookup.requireEntityByClientKey(clientProductKey)
+        val productId = entity.id!!
         val options = productOptionRepository.findAllByProductIdOrderBySortNoAscIdAsc(productId).map {
             ProductOptionView(it.optionName, it.optionValue, it.sortNo)
         }
         val skus = productSkuRepository.findAllByProductIdOrderByIdAsc(productId).map {
             ProductSkuView(it.id!!, it.skuCode, it.attrJson, it.salePrice, it.stockQty, it.weightKg, it.isActive)
         }
-        return ProductSkuMatrixView(productId, options, skus)
+        return ProductSkuMatrixView(entity.publicId, options, skus)
     }
 
     @Transactional
-    fun upsertSkuMatrix(productId: Long, req: ProductSkuMatrixUpsertRequest) {
-        productRepository.findById(productId).orElseThrow { BizException("product not found") }
+    fun upsertSkuMatrix(clientProductKey: String, req: ProductSkuMatrixUpsertRequest) {
+        val entity = productLookup.requireEntityByClientKey(clientProductKey)
+        val productId = entity.id!!
         // 基本校验：attrJson 必须是合法 JSON 对象，避免后续前端解析失败
         val skuCodeSet = mutableSetOf<String>()
         val attrSet = mutableSetOf<String>()
@@ -421,7 +440,7 @@ class ProductService(
             ProductImageView(thumbUrl = m.thumbUrl, fullUrl = m.fullUrl)
         }
         return ProductView(
-            id = it.id!!,
+            id = it.publicId,
             title = it.title,
             moq = it.moq,
             description = it.description,
@@ -528,11 +547,26 @@ class ProductService(
             val title = cb.like(cb.lower(root.get("title")), like)
             val sku = cb.like(cb.lower(cb.coalesce(root.get("skuCode"), "")), like)
             val idMatch = idLong?.let { cb.equal(root.get<Long>("id"), it) } ?: cb.disjunction()
-            cb.or(title, sku, idMatch)
+            val pub = cb.equal(root.get<String>("publicId"), term)
+            cb.or(title, sku, idMatch, pub)
         }
     }
 
     private fun clampPage(page: Int): Int = page.coerceAtLeast(0)
 
     private fun clampSize(size: Int): Int = size.coerceIn(1, 100)
+
+    private sealed interface TagFilter {
+        data object None : TagFilter
+        data class ById(val id: Long) : TagFilter
+        data object MissingCode : TagFilter
+    }
+
+    private fun resolveTagFilter(tagId: Long?, tagCode: String?): TagFilter {
+        if (tagId != null) return TagFilter.ById(tagId)
+        val tc = tagCode?.trim().orEmpty()
+        if (tc.isEmpty()) return TagFilter.None
+        val tag = tagRepository.findByCode(tc.uppercase()).orElse(null) ?: return TagFilter.MissingCode
+        return TagFilter.ById(tag.id!!)
+    }
 }

@@ -2,10 +2,14 @@ package com.trioForce.voyage.user
 
 import com.trioForce.voyage.common.ApiResponse
 import com.trioForce.voyage.common.ok
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.RequestParam
-import org.springframework.web.bind.annotation.RestController
+import jakarta.validation.Valid
+import org.springframework.web.bind.annotation.*
 
+/**
+ * 后台客户（注册用户）REST 接口。
+ *
+ * 具体业务与日志写在 [UserAdminService]；控制器保持薄封装，便于统一鉴权与路由扫描。
+ */
 @RestController
 class UserAdminController(
     private val userAdminService: UserAdminService,
@@ -19,4 +23,21 @@ class UserAdminController(
         @RequestParam(defaultValue = "20") size: Int,
         @RequestParam(required = false) q: String?,
     ): ApiResponse<PagedCustomers> = ok(userAdminService.listCustomers(page, size, q))
+
+    /** 更新后台备注与客户偏好文本。 */
+    @PatchMapping("/api/v1/admin/customers/{id}")
+    fun updateCustomer(
+        @PathVariable id: Long,
+        @Valid @RequestBody req: CustomerAdminUpdateRequest,
+    ): ApiResponse<String> {
+        userAdminService.updateCustomer(id, req)
+        return ok("updated")
+    }
+
+    /**
+     * 重置客户登录密码，返回一次性明文临时密码（请通过安全渠道告知客户）。
+     */
+    @PostMapping("/api/v1/admin/customers/{id}/reset-password")
+    fun resetPassword(@PathVariable id: Long): ApiResponse<AdminResetPasswordResponse> =
+        ok(AdminResetPasswordResponse(temporaryPassword = userAdminService.resetPasswordReturnPlain(id)))
 }

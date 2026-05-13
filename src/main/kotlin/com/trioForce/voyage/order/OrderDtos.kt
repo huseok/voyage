@@ -36,10 +36,24 @@ data class UpdateTrackingRequest(
 data class UpdateOrderStatusRequest(
     @field:NotBlank val status: String,
     val remark: String? = null,
+    /** 为 true 时允许状态「回滚」到字典中更早的位置，须配合非空 [remark]（修复订单场景）。 */
+    val forceRepair: Boolean = false,
 )
 
-data class FlowNextOrderStatusRequest(
+data class OrderLogisticsCreateRequest(
+    @field:NotBlank val trackingNo: String,
+    val carrier: String? = null,
     val remark: String? = null,
+)
+
+data class OrderLogisticsView(
+    val id: Long,
+    val orderNo: String,
+    val carrier: String?,
+    val trackingNo: String,
+    val remark: String?,
+    /** ISO-8601 字符串，与前台展示一致 */
+    val createdAt: String,
 )
 
 data class ConfirmDeliveredRequest(
@@ -47,7 +61,8 @@ data class ConfirmDeliveredRequest(
 )
 
 data class OrderItemView(
-    val productId: Long,
+    /** 商品对外雪花 ID */
+    val productId: String,
     val titleSnapshot: String,
     val priceSnapshot: String,
     val quantity: Int,
@@ -88,4 +103,8 @@ data class OrderView(
     val logisticsCompany: String?,
     val trackingNo: String?,
     val items: List<OrderItemView>,
+    /** 下单时间（ISO-8601） */
+    val createdAt: String,
+    /** 物流轨迹子表（按时间倒序由服务层组装） */
+    val logistics: List<OrderLogisticsView> = emptyList(),
 )

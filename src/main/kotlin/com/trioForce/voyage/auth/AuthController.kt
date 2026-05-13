@@ -4,8 +4,8 @@ import com.trioForce.voyage.common.ApiResponse
 import com.trioForce.voyage.common.ok
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import com.trioForce.voyage.common.logging.LogUtil
 import jakarta.validation.Valid
-import org.slf4j.LoggerFactory
 import org.springframework.web.bind.annotation.*
 
 /**
@@ -21,7 +21,7 @@ class AuthController(
     private val authService: AuthService,
     private val captchaService: CaptchaService,
 ) {
-    private val log = LoggerFactory.getLogger(AuthController::class.java)
+    private val log = LogUtil.logger<AuthController>()
 
     /**
      * 获取注册用图形验证码。

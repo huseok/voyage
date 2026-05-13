@@ -1,8 +1,8 @@
 package com.trioForce.voyage.media
 
 import com.trioForce.voyage.common.BizException
+import com.trioForce.voyage.common.logging.LogUtil
 import net.coobird.thumbnailator.Thumbnails
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
 import java.io.ByteArrayInputStream
@@ -21,7 +21,7 @@ import javax.imageio.ImageIO
 class ImageStorageService(
     private val props: MediaProperties,
 ) {
-    private val log = LoggerFactory.getLogger(javaClass)
+    private val log = LogUtil.logger<ImageStorageService>()
 
     /**
      * @return Pair(thumbUrl, fullUrl) 均为以 `/media/` 开头的站点相对路径

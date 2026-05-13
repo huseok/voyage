@@ -17,6 +17,10 @@ class ProductEntity(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null,
 
+    /** 对外雪花 ID（十进制字符串），API 与 URL 使用 */
+    @Column(name = "public_id", nullable = false, unique = true, length = 24)
+    var publicId: String = "",
+
     @Column(nullable = false, length = 255)
     var title: String,
 

@@ -1,0 +1,4 @@
+-- 用户称呼（注册必填，新字段）；后台备注与偏好（JSON 文本均可）
+ALTER TABLE t_users ADD COLUMN IF NOT EXISTS salutation VARCHAR(80) NOT NULL DEFAULT '';
+ALTER TABLE t_users ADD COLUMN IF NOT EXISTS admin_note VARCHAR(2000);
+ALTER TABLE t_users ADD COLUMN IF NOT EXISTS preferences TEXT;

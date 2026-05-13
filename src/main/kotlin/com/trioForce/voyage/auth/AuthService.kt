@@ -1,11 +1,11 @@
 package com.trioForce.voyage.auth
 
 import com.trioForce.voyage.common.BizException
+import com.trioForce.voyage.common.logging.LogUtil
 import com.trioForce.voyage.security.CurrentUser
 import com.trioForce.voyage.security.JwtService
 import com.trioForce.voyage.user.UserEntity
 import com.trioForce.voyage.user.UserRepository
-import org.slf4j.LoggerFactory
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.http.HttpStatus
@@ -26,7 +26,7 @@ class AuthService(
     private val jwtService: JwtService,
     private val captchaService: CaptchaService,
 ) {
-    private val log = LoggerFactory.getLogger(AuthService::class.java)
+    private val log = LogUtil.logger<AuthService>()
 
     /**
      * 创建新用户账号。
@@ -49,6 +49,7 @@ class AuthService(
                 email = req.email.trim().lowercase(),
                 passwordHash = passwordEncoder.encode(req.password),
                 name = req.name.trim(),
+                salutation = req.salutation.trim(),
                 phone = req.phone?.trim(),
                 country = req.country?.trim()
             )
@@ -122,6 +123,6 @@ class AuthService(
      */
     fun me(): MeResponse {
         val user = userRepository.findById(CurrentUser.userId()).orElseThrow { BizException("user not found") }
-        return MeResponse(user.id!!, user.email, user.name, user.role)
+        return MeResponse(user.id!!, user.email, user.name, user.salutation, user.role)
     }
 }

@@ -40,6 +40,7 @@ class OrderService(
     private val marketingService: MarketingService,
     private val membershipService: MembershipService,
     private val userAddressRepository: UserAddressRepository,
+    private val orderLogisticsRepository: OrderLogisticsRepository,
 ) {
     /**
      * 从购物车创建订单：仅处理 **已勾选** 行；可选 [CreateOrderRequest.cartItemIds] 再收窄行集合。
@@ -215,44 +216,73 @@ class OrderService(
         order.updatedAt = OffsetDateTime.now()
         orderRepository.save(order)
         appendStatusHistory(order.id!!, fromStatus, "SHIPPED", "update tracking")
+        persistLogisticsLine(
+            orderNo = order.orderNo,
+            trackingNo = req.trackingNo.trim(),
+            carrier = req.logisticsCompany?.trim()?.takeUnless { it.isEmpty() },
+            remark = "admin update tracking",
+        )
     }
 
     /**
      * 后台手工推进订单状态。
      *
-     * @param orderNo 订单号
-     * @param status 目标状态
+     * @param forceRepair 为 true 时允许字典顺序上的**回退**，此时 [remark] 必填（运营修复错单）。
      */
     @Transactional
-    fun adminUpdateStatus(orderNo: String, status: String, remark: String? = null) {
+    fun adminUpdateStatus(orderNo: String, status: String, remark: String? = null, forceRepair: Boolean = false) {
         val order = orderRepository.findByOrderNo(orderNo).orElseThrow { BizException("order not found") }
         val next = status.trim().uppercase()
-        validateTransition(order.status, next, allowSkip = true)
+        if (forceRepair) {
+            val r = remark?.trim().orEmpty()
+            if (r.isEmpty()) throw BizException("force repair requires remark")
+            val chain = getConfiguredOrderStatuses()
+            val currentIdx = chain.indexOf(order.status)
+            val nextIdx = chain.indexOf(next)
+            if (currentIdx < 0 || nextIdx < 0) {
+                throw BizException("status not configured in ORDER_STATUS")
+            }
+            if (nextIdx >= currentIdx) {
+                throw BizException("force repair only allows rollback to an earlier status")
+            }
+        } else {
+            validateTransition(order.status, next, allowSkip = true)
+        }
         val fromStatus = order.status
         order.status = next
         order.updatedAt = OffsetDateTime.now()
         onBecamePaid(order, fromStatus)
         orderRepository.save(order)
-        appendStatusHistory(order.id!!, fromStatus, next, remark?.trim().takeUnless { it.isNullOrBlank() } ?: "admin update status")
+        val histRemark =
+            remark?.trim().takeUnless { it.isNullOrBlank() }
+                ?: if (forceRepair) "force repair" else "admin update status"
+        appendStatusHistory(order.id!!, fromStatus, next, histRemark)
     }
 
-    /**
-     * 后台自动流转到下一状态（按字典 ORDER_STATUS 排序）。
-     */
+    /** 后台单独写入一条物流轨迹（不修改订单主表快照时仍可追溯）。 */
     @Transactional
-    fun adminFlowNextStatus(orderNo: String, remark: String? = null) {
+    fun adminAppendLogistics(orderNo: String, req: OrderLogisticsCreateRequest) {
+        orderRepository.findByOrderNo(orderNo).orElseThrow { BizException("order not found") }
+        persistLogisticsLine(
+            orderNo = orderNo.trim(),
+            trackingNo = req.trackingNo.trim(),
+            carrier = req.carrier?.trim()?.takeUnless { it.isEmpty() },
+            remark = req.remark?.trim()?.takeUnless { it.isEmpty() } ?: "admin append logistics",
+        )
+    }
+
+    /** 后台逻辑删除订单（列表默认不可见，依赖实体 [@Where]）。 */
+    @Transactional
+    fun adminLogicalDelete(orderNo: String) {
         val order = orderRepository.findByOrderNo(orderNo).orElseThrow { BizException("order not found") }
-        val chain = getConfiguredOrderStatuses()
-        val currentIdx = chain.indexOf(order.status)
-        if (currentIdx < 0) throw BizException("current status not configured in ORDER_STATUS: ${order.status}")
-        if (currentIdx >= chain.lastIndex) throw BizException("already at final status")
-        val next = chain[currentIdx + 1]
+        val uid = runCatching { CurrentUser.userId() }.getOrNull()
         val fromStatus = order.status
-        order.status = next
+        order.isDeleted = true
+        order.deletedAt = OffsetDateTime.now()
+        order.deletedBy = uid
         order.updatedAt = OffsetDateTime.now()
-        onBecamePaid(order, fromStatus)
         orderRepository.save(order)
-        appendStatusHistory(order.id!!, fromStatus, next, remark?.trim().takeUnless { it.isNullOrBlank() } ?: "flow next")
+        appendStatusHistory(order.id!!, fromStatus, fromStatus, "admin logical delete")
     }
 
     /**
@@ -318,6 +348,19 @@ class OrderService(
         )
     }
 
+    private fun persistLogisticsLine(orderNo: String, trackingNo: String, carrier: String?, remark: String?) {
+        orderLogisticsRepository.save(
+            OrderLogisticsEntity(
+                orderNo = orderNo,
+                trackingNo = trackingNo,
+                carrier = carrier,
+                remark = remark,
+                createdAt = OffsetDateTime.now(),
+                createdBy = runCatching { CurrentUser.userId() }.getOrNull(),
+            ),
+        )
+    }
+
     private fun appendStatusHistory(orderId: Long, from: String?, to: String, remark: String) {
         orderStatusHistoryRepository.save(
             OrderStatusHistoryEntity(
@@ -375,13 +418,26 @@ class OrderService(
     }
 
     private fun toView(order: OrderEntity): OrderView {
-        val items = orderItemRepository.findAllByOrderId(order.id!!).map {
+        val itemRows = orderItemRepository.findAllByOrderId(order.id!!)
+        val pidSet = itemRows.map { it.productId }.toSet()
+        val pubByInternal = productRepository.findAllById(pidSet).associate { it.id!! to it.publicId }
+        val items = itemRows.map {
             OrderItemView(
-                productId = it.productId,
+                productId = pubByInternal[it.productId] ?: it.productId.toString(),
                 titleSnapshot = it.titleSnapshot,
                 priceSnapshot = it.priceSnapshot.toPlainString(),
                 quantity = it.quantity,
                 thumbUrl = it.thumbUrl,
+            )
+        }
+        val logisticsRows = orderLogisticsRepository.findAllByOrderNoOrderByCreatedAtDesc(order.orderNo).map { row ->
+            OrderLogisticsView(
+                id = row.id!!,
+                orderNo = row.orderNo,
+                carrier = row.carrier,
+                trackingNo = row.trackingNo,
+                remark = row.remark,
+                createdAt = DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(row.createdAt),
             )
         }
         return OrderView(
@@ -411,6 +467,8 @@ class OrderService(
             logisticsCompany = order.logisticsCompany,
             trackingNo = order.trackingNo,
             items = items,
+            createdAt = DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(order.createdAt),
+            logistics = logisticsRows,
         )
     }
 

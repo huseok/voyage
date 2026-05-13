@@ -1,7 +1,7 @@
 package com.trioForce.voyage.auth
 
+import com.trioForce.voyage.common.logging.LogUtil
 import com.wf.captcha.SpecCaptcha
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
@@ -24,6 +24,9 @@ class CaptchaService(
     /** 内存中最多保留的待发验证码条数上限（近似），用于防止内存无限增长。 */
     private val maxEntries: Int = 8000,
 ) {
+    /** 本服务专用 Logger，勿改用 `println` / `System.out`。 */
+    private val log = LogUtil.logger<CaptchaService>()
+
     /** 单条验证码记录：正确答案（仅内存）与绝对过期时刻。 */
     data class CaptchaRecord(val answer: String, val expiresAt: Instant)
 
@@ -123,8 +126,6 @@ class CaptchaService(
     }
 
     companion object {
-        private val log = LoggerFactory.getLogger(CaptchaService::class.java)
-
         private const val WIDTH = 120
         private const val HEIGHT = 40
         private const val CODE_LEN = 4

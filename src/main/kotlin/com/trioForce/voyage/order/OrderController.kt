@@ -84,24 +84,32 @@ class OrderController(
     }
 
     /**
-     * 后台推进订单状态。
-     *
-     * @param orderNo 订单号
-     * @param req 新状态
-     * @return 更新结果
+     * 后台追加一条物流轨迹（写入 [t_order_logistics]）。
+     */
+    @PostMapping("/api/v1/admin/orders/{orderNo}/logistics")
+    fun appendLogistics(
+        @PathVariable orderNo: String,
+        @Valid @RequestBody req: OrderLogisticsCreateRequest,
+    ): ApiResponse<String> {
+        orderService.adminAppendLogistics(orderNo, req)
+        return ok("logistics recorded")
+    }
+
+    /**
+     * 后台推进订单状态；[UpdateOrderStatusRequest.forceRepair] 为 true 时允许回退，且必须填写备注。
      */
     @PatchMapping("/api/v1/admin/orders/{orderNo}/status")
     fun updateStatus(@PathVariable orderNo: String, @Valid @RequestBody req: UpdateOrderStatusRequest): ApiResponse<String> {
-        orderService.adminUpdateStatus(orderNo, req.status, req.remark)
+        orderService.adminUpdateStatus(orderNo, req.status, req.remark, req.forceRepair)
         return ok("status updated")
     }
 
     /**
-     * 后台按字典顺序自动流转到下一状态。
+     * 后台逻辑删除订单。
      */
-    @PatchMapping("/api/v1/admin/orders/{orderNo}/status/flow-next")
-    fun flowNextStatus(@PathVariable orderNo: String, @RequestBody req: FlowNextOrderStatusRequest): ApiResponse<String> {
-        orderService.adminFlowNextStatus(orderNo, req.remark)
-        return ok("status flow-next updated")
+    @DeleteMapping("/api/v1/admin/orders/{orderNo}")
+    fun adminDelete(@PathVariable orderNo: String): ApiResponse<String> {
+        orderService.adminLogicalDelete(orderNo)
+        return ok("deleted")
     }
 }

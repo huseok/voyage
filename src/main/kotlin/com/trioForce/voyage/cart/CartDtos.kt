@@ -4,7 +4,7 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 
 data class AddCartItemRequest(
-    val productId: Long,
+    @field:jakarta.validation.constraints.NotBlank val productId: String,
     @field:Min(1) val quantity: Int
 )
 
@@ -28,7 +28,8 @@ data class ReorderToCartRequest(
 
 data class CartItemView(
     val itemId: Long,
-    val productId: Long,
+    /** 商品对外雪花 ID */
+    val productId: String,
     val title: String,
     val moq: Int,
     val quantity: Int,
