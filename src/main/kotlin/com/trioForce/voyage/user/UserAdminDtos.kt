@@ -30,7 +30,12 @@ data class CustomerAdminUpdateRequest(
     val preferences: String? = null,
 )
 
-/** 重置密码接口一次性返回临时密码，由管理员线下告知客户；请勿写入持久化日志正文。 */
+/** 管理员指定新密码；不传或留空时由服务层回退为该用户邮箱（须满足最小长度，与注册密码规则一致）。 */
+data class AdminResetPasswordRequest(
+    val newPassword: String? = null,
+)
+
+/** 重置密码接口一次性返回明文新密码，由管理员线下告知客户；请勿写入持久化日志正文。 */
 data class AdminResetPasswordResponse(
     val temporaryPassword: String,
 )

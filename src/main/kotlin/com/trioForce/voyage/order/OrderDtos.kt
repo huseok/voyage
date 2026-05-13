@@ -78,6 +78,8 @@ data class PagedOrders(
 
 data class OrderView(
     val orderNo: String,
+    /** 下单用户 id（后台列表筛选与审计展示用） */
+    val userId: Long,
     val status: String,
     val paymentStatus: String,
     val totalAmount: String,

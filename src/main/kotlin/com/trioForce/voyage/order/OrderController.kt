@@ -48,6 +48,7 @@ class OrderController(
      * @param phase 阶段：`ALL` 或不传=全部；`PENDING_PAYMENT`/`PAID`/`SHIPPED`/`DELIVERED`/`COMPLETED`/`CANCELLED`；
      *   `FULFILLING`=待发货+配送中；`DONE`=已送达或已完成。
      * @param status 若传则按精确状态覆盖 phase。
+     * @param userId 若传且为正数，仅返回该下单用户的订单。
      */
     @GetMapping("/api/v1/admin/orders")
     fun listAllForAdmin(
@@ -56,7 +57,8 @@ class OrderController(
         @RequestParam(required = false) q: String?,
         @RequestParam(required = false) status: String?,
         @RequestParam(required = false) phase: String?,
-    ): ApiResponse<PagedOrders> = ok(orderService.listAdminPage(page, size, q, status, phase))
+        @RequestParam(required = false) userId: Long?,
+    ): ApiResponse<PagedOrders> = ok(orderService.listAdminPage(page, size, q, status, phase, userId))
 
     /**
      * 用户确认完成订单（收货后）。

@@ -177,11 +177,21 @@ class OrderService(
         orderRepository.findAll(Sort.by(Sort.Direction.DESC, "id")).map { toView(it) }
 
     /**
-     * 后台分页查询订单；可选关键字（订单号、收货人）、精确状态或阶段筛选（phase 与 status 同时传时以 status 为准）。
+     * 后台分页查询订单；可选关键字（订单号、收货人）、精确状态或阶段筛选（phase 与 status 同时传时以 status 为准）、按下单用户 id 精确筛选。
      */
-    fun listAdminPage(page: Int, size: Int, q: String?, status: String?, phase: String?): PagedOrders {
+    fun listAdminPage(
+        page: Int,
+        size: Int,
+        q: String?,
+        status: String?,
+        phase: String?,
+        userId: Long?,
+    ): PagedOrders {
         val pageable = PageRequest.of(clampOrderPage(page), clampOrderSize(size), Sort.by(Sort.Direction.DESC, "id"))
         var spec: Specification<OrderEntity> = Specification { _, _, cb -> cb.conjunction() }
+        userId?.takeIf { it > 0 }?.let { uid ->
+            spec = spec.and { root, _, cb -> cb.equal(root.get<Long>("userId"), uid) }
+        }
         keywordOrderSpec(q)?.let { spec = spec.and(it) }
         val st = status?.trim()?.takeUnless { it.isBlank() }?.uppercase()
         if (st != null) {
@@ -442,6 +452,7 @@ class OrderService(
         }
         return OrderView(
             orderNo = order.orderNo,
+            userId = order.userId,
             status = order.status,
             paymentStatus = order.paymentStatus,
             totalAmount = order.totalAmount.toPlainString(),

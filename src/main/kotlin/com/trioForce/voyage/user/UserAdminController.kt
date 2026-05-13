@@ -35,9 +35,14 @@ class UserAdminController(
     }
 
     /**
-     * 重置客户登录密码，返回一次性明文临时密码（请通过安全渠道告知客户）。
+     * 重置客户登录密码，返回一次性明文新密码（请通过安全渠道告知客户）。
+     *
+     * 请求体可选：[AdminResetPasswordRequest.newPassword] 有非空白值时使用该明文；否则使用客户邮箱作为新密码。
      */
     @PostMapping("/api/v1/admin/customers/{id}/reset-password")
-    fun resetPassword(@PathVariable id: Long): ApiResponse<AdminResetPasswordResponse> =
-        ok(AdminResetPasswordResponse(temporaryPassword = userAdminService.resetPasswordReturnPlain(id)))
+    fun resetPassword(
+        @PathVariable id: Long,
+        @RequestBody(required = false) body: AdminResetPasswordRequest?,
+    ): ApiResponse<AdminResetPasswordResponse> =
+        ok(AdminResetPasswordResponse(temporaryPassword = userAdminService.resetPasswordReturnPlain(id, body)))
 }

@@ -10,7 +10,6 @@ import org.springframework.data.jpa.domain.Specification
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.security.SecureRandom
 import java.time.OffsetDateTime
 
 /**
@@ -105,18 +104,24 @@ class UserAdminService(
     }
 
     /**
-     * 生成随机临时明文密码、写入 bcrypt 哈希并持久化；返回值 **仅** 用于接口响应给前端展示一次。
+     * 将明文新密码写入 bcrypt 哈希并持久化；返回值 **仅** 用于接口响应给前端展示一次。
      *
-     * **安全**：禁止在日志中输出临时密码；如需审计请依赖独立审计表或脱敏流水。
+     * [req] 中 [AdminResetPasswordRequest.newPassword] 非空白时使用该值；否则使用用户邮箱作为新密码（须至少 6 字符）。
+     *
+     * **安全**：禁止在日志中输出明文密码；如需审计请依赖独立审计表或脱敏流水。
      */
     @Transactional
-    fun resetPasswordReturnPlain(id: Long): String {
+    fun resetPasswordReturnPlain(id: Long, req: AdminResetPasswordRequest?): String {
         val user = userRepository.findById(id).orElseThrow { BizException("user not found") }
-        val plain = randomTempPassword()
+        val trimmed = req?.newPassword?.trim()?.takeUnless { it.isEmpty() }
+        val plain = trimmed ?: user.email
+        if (plain.length < 6) {
+            throw BizException("new password must be at least 6 characters (use a longer email or set a password)")
+        }
         user.passwordHash = passwordEncoder.encode(plain)
         user.updatedAt = OffsetDateTime.now()
         userRepository.save(user)
-        log.warn("管理员已重置客户登录密码：userId={}（临时密码不在日志中记录）", id)
+        log.warn("管理员已重置客户登录密码：userId={}（明文密码不在日志中记录）", id)
         return plain
     }
 
@@ -135,10 +140,4 @@ class UserAdminService(
         }
     }
 
-    /** 生成易读、去混淆的临时密码（排除易混字符 0/O、1/l/I 等）。 */
-    private fun randomTempPassword(): String {
-        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
-        val r = SecureRandom()
-        return (1..12).map { chars[r.nextInt(chars.length)] }.joinToString("")
-    }
 }
