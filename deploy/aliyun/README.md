@@ -93,6 +93,8 @@ sudo ln -sf /etc/nginx/sites-available/globuy /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-安全组放行 **80**；勿对公网开放 **5432**、**8080**。
+安全组放行 **80**（HTTPS 后另放行 **443**）；勿对公网开放 **5432**、**8080**。
+
+**自定义域名**（`chzautokeys.com`、`chzautokeys.cyou`）：DNS、证书与 CORS 见 **[`DOMAIN_SETUP.md`](./DOMAIN_SETUP.md)**。
 
 配置项说明见后端 `application.yaml`、`application-cloud.yaml`、`application-aliyun.yaml` 及前端 `.env.production.example`。

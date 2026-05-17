@@ -1,0 +1,59 @@
+# 在已用 certbot 为四个主机名签发证书后使用（见 ../DOMAIN_SETUP.md）：
+#   sudo cp .../globuy.conf.https.example /etc/nginx/sites-available/globuy
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# 行为：HTTP 仅 ACME + 跳转 HTTPS；HTTPS 上非 chzautokeys.com 的主机名 301 到主域。
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name chzautokeys.com www.chzautokeys.com chzautokeys.cyou www.chzautokeys.cyou;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 301 https://chzautokeys.com$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name chzautokeys.com www.chzautokeys.com chzautokeys.cyou www.chzautokeys.cyou;
+
+    ssl_certificate     /etc/letsencrypt/live/chzautokeys.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/chzautokeys.com/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    # 统一 canonical：仅 chzautokeys.com 提供内容，其余主机名跳转
+    if ($host != chzautokeys.com) {
+        return 301 https://chzautokeys.com$request_uri;
+    }
+
+    root /opt/globuy/www/frontend;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /media/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

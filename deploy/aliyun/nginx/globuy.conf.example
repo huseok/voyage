@@ -1,12 +1,22 @@
 # sudo cp .../voyage/deploy/aliyun/nginx/globuy.conf.example /etc/nginx/sites-available/globuy
 # 前端 dist 放到 /opt/globuy/www/frontend
+#
+# 域名：chzautokeys.com（主站）、chzautokeys.cyou（备用，可与主站同内容或 301 到 .com）
+# DNS / HTTPS 申请步骤见 ../DOMAIN_SETUP.md
 
 server {
     listen 80;
-    server_name _;
+    listen [::]:80;
+    server_name chzautokeys.com www.chzautokeys.com chzautokeys.cyou www.chzautokeys.cyou;
 
     root /opt/globuy/www/frontend;
     index index.html;
+
+    # Let's Encrypt 校验（certbot --webroot 时使用；路径需与 certbot -w 一致）
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        try_files $uri =404;
+    }
 
     location / {
         try_files $uri $uri/ /index.html;
@@ -25,5 +35,6 @@ server {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }

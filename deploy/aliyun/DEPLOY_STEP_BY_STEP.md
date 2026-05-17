@@ -260,7 +260,9 @@ sudo nginx -t && sudo systemctl reload nginx
 | `location /api/` → `127.0.0.1:8080` | 反向代理后端 |
 | `location /media/` → `127.0.0.1:8080` | 商品图等 |
 
-云安全组：**放行 80**；**不要**对 `0.0.0.0/0` 放行 **5432、8080**（本方案 DB/API 只本机访问）。
+云安全组：**放行 80**（启用 HTTPS 后另放行 **443**）；**不要**对 `0.0.0.0/0` 放行 **5432、8080**（本方案 DB/API 只本机访问）。
+
+**已购域名 `chzautokeys.com` / `chzautokeys.cyou`：** Nginx 示例已写入 `server_name`；完整 DNS、Let's Encrypt 与 `APP_CORS_ALLOWED_ORIGINS` 见 **[`DOMAIN_SETUP.md`](./DOMAIN_SETUP.md)**。
 
 ---
 
