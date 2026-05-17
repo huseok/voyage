@@ -30,7 +30,13 @@ class SecurityConfig(
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests {
                 // 登录注册、公开商品、文档接口允许匿名访问
-                it.requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/captcha").permitAll()
+                it.requestMatchers(
+                    "/api/v1/auth/register",
+                    "/api/v1/auth/login",
+                    "/api/v1/auth/refresh",
+                    "/api/v1/auth/captcha",
+                    "/api/v1/legal/versions",
+                ).permitAll()
                 it.requestMatchers("/api/v1/products/**").permitAll()
                 // 首页 / 目录 / 顶栏分类导航：仅列表查询，与 CategoryController GET /api/v1/categories 对应
                 it.requestMatchers("/api/v1/categories").permitAll()

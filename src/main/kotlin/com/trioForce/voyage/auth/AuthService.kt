@@ -6,6 +6,7 @@ import com.trioForce.voyage.security.CurrentUser
 import com.trioForce.voyage.security.JwtService
 import com.trioForce.voyage.user.UserEntity
 import com.trioForce.voyage.user.UserRepository
+import com.trioForce.voyage.user.buildDisplayName
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.http.HttpStatus
@@ -44,14 +45,32 @@ class AuthService(
             throw BizException("invalid captcha")
         }
         if (userRepository.findByEmail(req.email).isPresent) throw BizException("email already exists")
+        if (req.termsVersion.trim() != LegalVersions.TERMS || req.privacyVersion.trim() != LegalVersions.PRIVACY) {
+            throw BizException("legal version outdated")
+        }
+        val firstName = req.firstName.trim()
+        val lastName = req.lastName.trim()
+        val displayName =
+            req.name?.trim()?.takeIf { it.isNotEmpty() }
+                ?: buildDisplayName(firstName, lastName)
+        if (displayName.isBlank()) throw BizException("name required")
+        val now = OffsetDateTime.now()
         userRepository.save(
             UserEntity(
                 email = req.email.trim().lowercase(),
                 passwordHash = passwordEncoder.encode(req.password),
-                name = req.name.trim(),
-                salutation = req.salutation.trim(),
-                phone = req.phone?.trim(),
-                country = req.country?.trim()
+                name = displayName,
+                firstName = firstName,
+                lastName = lastName,
+                companyName = req.companyName?.trim()?.takeIf { it.isNotEmpty() },
+                salutation = req.salutation?.trim().orEmpty(),
+                phone = req.phone?.trim()?.takeIf { it.isNotEmpty() },
+                country = req.country?.trim()?.takeIf { it.isNotEmpty() },
+                termsAcceptedAt = now,
+                termsVersion = LegalVersions.TERMS,
+                privacyVersion = LegalVersions.PRIVACY,
+                createdAt = now,
+                updatedAt = now,
             )
         )
         // 成功路径仅记一条 INFO，避免输出完整邮箱（如需审计请依赖数据库或专用审计表）。
@@ -123,6 +142,17 @@ class AuthService(
      */
     fun me(): MeResponse {
         val user = userRepository.findById(CurrentUser.userId()).orElseThrow { BizException("user not found") }
-        return MeResponse(user.id!!, user.email, user.name, user.salutation, user.role)
+        return MeResponse(
+            id = user.id!!,
+            email = user.email,
+            name = user.name,
+            firstName = user.firstName,
+            lastName = user.lastName,
+            salutation = user.salutation,
+            companyName = user.companyName,
+            phone = user.phone,
+            country = user.country,
+            role = user.role,
+        )
     }
 }

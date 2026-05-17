@@ -73,7 +73,7 @@ class ProductService(
         val result = productRepository.findAll(spec, pageable)
         val ids = result.content.mapNotNull { it.id }
         val mediaByProduct = batchGalleryByProductId(ids)
-        val tagsByProduct = batchTagsByProductId(ids)
+        val tagsByProduct = batchTagsByProductId(ids, forStorefront = true)
         return PagedProducts(
             items = result.content.map {
                 val pid = it.id ?: throw IllegalStateException("product without id")
@@ -165,7 +165,7 @@ class ProductService(
         val it = productLookup.requireEntityByClientKey(clientProductKey)
         if (!it.isActive) throw BizException("product not found")
         val pid = it.id!!
-        val tags = batchTagsByProductId(listOf(pid))[pid] ?: emptyList()
+        val tags = batchTagsByProductId(listOf(pid), forStorefront = true)[pid] ?: emptyList()
         return toProductView(it, includeMatrix = true, tags = tags, exposeCost = false)
     }
 
@@ -340,7 +340,10 @@ class ProductService(
      * 批量加载商品标签，避免列表 N+1。
      * Map 缺键表示该商品无标签，调用方使用 `[id] ?: emptyList()`。
      */
-    private fun batchTagsByProductId(ids: List<Long>): Map<Long, List<TagView>> {
+    /**
+     * @param forStorefront true 时仅返回启用且 [TagEntity.showOnStorefront] 的标签；管理端为 false 时仍仅过滤停用标签。
+     */
+    private fun batchTagsByProductId(ids: List<Long>, forStorefront: Boolean = false): Map<Long, List<TagView>> {
         if (ids.isEmpty()) return emptyMap()
         val links = productTagRepository.findAllByProductIdIn(ids)
         if (links.isEmpty()) return emptyMap()
@@ -348,9 +351,12 @@ class ProductService(
         val tagEntities = tagRepository.findAllById(tagIds).associateBy { it.id!! }
         return links.groupBy { it.productId }.mapValues { (_, rows) ->
             rows.mapNotNull { tagEntities[it.tagId] }
-                .filter { it.isActive }
+                .filter { te ->
+                    if (!te.isActive) return@filter false
+                    if (forStorefront) te.showOnStorefront else true
+                }
                 .sortedWith(compareBy({ it.sortNo }, { it.id ?: 0L }))
-                .map { te -> TagView(te.id!!, te.code, te.name, te.sortNo, te.isActive) }
+                .map { te -> TagView(te.id!!, te.code, te.nameZh, te.nameEn, te.sortNo, te.isActive, te.showOnStorefront) }
         }
     }
 

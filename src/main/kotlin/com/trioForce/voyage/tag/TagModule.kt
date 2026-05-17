@@ -16,7 +16,7 @@ import java.util.Optional
 
 /**
  * 商品标签模块：
- * - [TagEntity]：标签主数据（编码唯一、展示名、排序、启用）
+ * - [TagEntity]：标签主数据（编码唯一、中英文名称、排序、启用、是否前台展示）
  * - [ProductTagEntity]：商品与标签多对多关联（级联删除）
  * - 后台 CRUD：`/api/v1/admin/tags`
  */
@@ -27,12 +27,17 @@ class TagEntity(
     var id: Long? = null,
     @Column(nullable = false, unique = true, length = 64)
     var code: String,
-    @Column(nullable = false, length = 120)
-    var name: String,
+    @Column(name = "name_zh", nullable = false, length = 120)
+    var nameZh: String,
+    @Column(name = "name_en", nullable = false, length = 120)
+    var nameEn: String,
     @Column(name = "sort_no", nullable = false)
     var sortNo: Int = 0,
     @Column(name = "is_active", nullable = false)
     var isActive: Boolean = true,
+    /** 是否在商城前台展示（目录筛选、商品详情标签等）；停用标签始终不展示 */
+    @Column(name = "show_on_storefront", nullable = false)
+    var showOnStorefront: Boolean = true,
     @Column(name = "created_at", nullable = false)
     var createdAt: OffsetDateTime = OffsetDateTime.now(),
     @Column(name = "updated_at", nullable = false)
@@ -55,8 +60,8 @@ class ProductTagEntity(
 interface TagRepository : JpaRepository<TagEntity, Long> {
     fun findAllByOrderBySortNoAscIdAsc(): List<TagEntity>
 
-    /** 前台筛选用：仅返回启用标签，排序一致 */
-    fun findAllByIsActiveIsTrueOrderBySortNoAscIdAsc(): List<TagEntity>
+    /** 前台筛选用：启用且允许前台展示 */
+    fun findAllByIsActiveIsTrueAndShowOnStorefrontIsTrueOrderBySortNoAscIdAsc(): List<TagEntity>
 
     fun findByCode(code: String): Optional<TagEntity>
 }
@@ -70,19 +75,26 @@ interface ProductTagRepository : JpaRepository<ProductTagEntity, Long> {
 data class TagView(
     val id: Long,
     val code: String,
-    val name: String,
+    val nameZh: String,
+    val nameEn: String,
     val sortNo: Int = 0,
     val isActive: Boolean = true,
+    val showOnStorefront: Boolean = true,
 )
 
 data class TagUpsertRequest(
     @field:NotBlank
     @field:Pattern(regexp = "^[A-Za-z0-9][A-Za-z0-9_-]{1,62}$", message = "tag code: 2-64 chars, letters, digits, _ or -")
     val code: String,
-    @field:NotBlank val name: String,
+    @field:NotBlank val nameZh: String,
+    @field:NotBlank val nameEn: String,
     val sortNo: Int = 0,
     val isActive: Boolean = true,
+    val showOnStorefront: Boolean = true,
 )
+
+private fun TagEntity.toView(): TagView =
+    TagView(id!!, code, nameZh, nameEn, sortNo, isActive, showOnStorefront)
 
 @Service
 class TagService(
@@ -90,15 +102,11 @@ class TagService(
     private val productTagRepository: ProductTagRepository,
 ) {
     fun listAll(): List<TagView> =
-        tagRepository.findAllByOrderBySortNoAscIdAsc().map {
-            TagView(it.id!!, it.code, it.name, it.sortNo, it.isActive)
-        }
+        tagRepository.findAllByOrderBySortNoAscIdAsc().map { it.toView() }
 
-    /** 匿名可读：目录页标签筛选 */
+    /** 匿名可读：目录页标签筛选（启用 + 允许前台展示） */
     fun listActiveForStorefront(): List<TagView> =
-        tagRepository.findAllByIsActiveIsTrueOrderBySortNoAscIdAsc().map {
-            TagView(it.id!!, it.code, it.name, it.sortNo, it.isActive)
-        }
+        tagRepository.findAllByIsActiveIsTrueAndShowOnStorefrontIsTrueOrderBySortNoAscIdAsc().map { it.toView() }
 
     @Transactional
     fun create(req: TagUpsertRequest): Long {
@@ -106,9 +114,11 @@ class TagService(
         val entity = tagRepository.save(
             TagEntity(
                 code = req.code.trim().uppercase(),
-                name = req.name.trim(),
+                nameZh = req.nameZh.trim(),
+                nameEn = req.nameEn.trim(),
                 sortNo = req.sortNo,
                 isActive = req.isActive,
+                showOnStorefront = req.showOnStorefront,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -123,9 +133,11 @@ class TagService(
         if (entity.code != newCode) {
             throw BizException("tag code cannot be changed")
         }
-        entity.name = req.name.trim()
+        entity.nameZh = req.nameZh.trim()
+        entity.nameEn = req.nameEn.trim()
         entity.sortNo = req.sortNo
         entity.isActive = req.isActive
+        entity.showOnStorefront = req.showOnStorefront
         entity.updatedAt = OffsetDateTime.now()
         tagRepository.save(entity)
     }

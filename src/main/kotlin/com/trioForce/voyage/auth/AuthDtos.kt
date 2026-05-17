@@ -1,5 +1,6 @@
 package com.trioForce.voyage.auth
 
+import jakarta.validation.constraints.AssertTrue
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -15,23 +16,28 @@ data class CaptchaResponse(
 )
 
 /**
- * 用户自助注册请求体。
- *
- * **验证码**：`captchaId` / `captchaCode` 须与 [CaptchaResponse] 及用户所见图片一致；
- * 服务端一次性校验见 [CaptchaService.validateAndConsume]（通过后该 `captchaId` 作废）。
+ * 用户自助注册请求体（欧美式：名/姓分开，须同意当前版服务条款与隐私政策）。
  */
 data class RegisterRequest(
     @field:Email @field:NotBlank val email: String,
     @field:NotBlank @field:Size(min = 6, max = 64) val password: String,
-    @field:NotBlank val name: String,
-    /** 称呼：如先生/女士/职务等，与 [name] 区分 */
-    @field:NotBlank val salutation: String,
+    @field:NotBlank @field:Size(max = 80) val firstName: String,
+    @field:NotBlank @field:Size(max = 80) val lastName: String,
+    /** 展示用全名；若为空则由服务端按 firstName + lastName 拼接 */
+    val name: String? = null,
+    /** 可选称谓，如 Mr、Ms */
+    val salutation: String? = null,
+    @field:Size(max = 200) val companyName: String? = null,
     val phone: String? = null,
     val country: String? = null,
-    /** 与 `GET /api/v1/auth/captcha` 返回的 `captchaId` 完全一致。 */
     @field:NotBlank val captchaId: String,
-    /** 用户辨认的图片字符；与服务端比对时不区分大小写，**禁止**写入日志。 */
     @field:NotBlank val captchaCode: String,
+    @field:AssertTrue(message = "must accept terms of service")
+    val acceptedTerms: Boolean = false,
+    @field:AssertTrue(message = "must accept privacy policy")
+    val acceptedPrivacy: Boolean = false,
+    @field:NotBlank val termsVersion: String,
+    @field:NotBlank val privacyVersion: String,
 )
 
 data class LoginRequest(
@@ -54,10 +60,16 @@ data class LoginResponse(
 data class RefreshTokenRequest(
     @field:NotBlank val refreshToken: String
 )
+
 data class MeResponse(
     val id: Long,
     val email: String,
     val name: String,
+    val firstName: String,
+    val lastName: String,
     val salutation: String,
+    val companyName: String?,
+    val phone: String?,
+    val country: String?,
     val role: String,
 )

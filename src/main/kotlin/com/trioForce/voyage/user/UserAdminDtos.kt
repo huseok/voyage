@@ -6,8 +6,10 @@ data class CustomerAdminView(
     val id: Long,
     val email: String,
     val name: String,
-    /** 用户注册时填写的称呼 */
+    val firstName: String,
+    val lastName: String,
     val salutation: String,
+    val companyName: String?,
     val phone: String?,
     val country: String?,
     val role: String,

@@ -22,9 +22,27 @@ class UserEntity(
     @Column(nullable = false, length = 100)
     var name: String,
 
-    /** 用户称呼（注册必填）；历史数据可能为空串 */
+    @Column(name = "first_name", nullable = false, length = 80)
+    var firstName: String = "",
+
+    @Column(name = "last_name", nullable = false, length = 80)
+    var lastName: String = "",
+
+    @Column(name = "company_name", length = 200)
+    var companyName: String? = null,
+
+    /** 可选称谓：Mr / Ms / Dr 等；欧美注册常见，非必填 */
     @Column(nullable = false, length = 80)
     var salutation: String = "",
+
+    @Column(name = "terms_accepted_at")
+    var termsAcceptedAt: OffsetDateTime? = null,
+
+    @Column(name = "terms_version", length = 32)
+    var termsVersion: String? = null,
+
+    @Column(name = "privacy_version", length = 32)
+    var privacyVersion: String? = null,
 
     @Column(name = "admin_note", columnDefinition = "text")
     var adminNote: String? = null,
