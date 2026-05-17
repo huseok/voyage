@@ -95,6 +95,13 @@ sudo nginx -t && sudo systemctl reload nginx
 
 安全组放行 **80**（HTTPS 后另放行 **443**）；勿对公网开放 **5432**、**8080**。
 
-**自定义域名**（`chzautokeys.com`、`chzautokeys.cyou`）：DNS、证书与 CORS 见 **[`DOMAIN_SETUP.md`](./DOMAIN_SETUP.md)**。
+**自定义域名**（`chzautokeys.com`、`chzautokeys.cyou`）：DNS、HTTPS、CORS、排错与 **2026-05-17 上线实录** 见 **[`DOMAIN_SETUP.md`](./DOMAIN_SETUP.md)**；Nginx 三份示例见 **[`nginx/README.md`](./nginx/README.md)**。
+
+重启 API（无 Compose V2 时用连字符）：
+
+```bash
+docker-compose -f deploy/aliyun/docker-compose.stack.yml \
+  --env-file /opt/globuy/config/env.backend restart voyage-api
+```
 
 配置项说明见后端 `application.yaml`、`application-cloud.yaml`、`application-aliyun.yaml` 及前端 `.env.production.example`。

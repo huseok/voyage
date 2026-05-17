@@ -262,7 +262,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 云安全组：**放行 80**（启用 HTTPS 后另放行 **443**）；**不要**对 `0.0.0.0/0` 放行 **5432、8080**（本方案 DB/API 只本机访问）。
 
-**已购域名 `chzautokeys.com` / `chzautokeys.cyou`：** Nginx 示例已写入 `server_name`；完整 DNS、Let's Encrypt 与 `APP_CORS_ALLOWED_ORIGINS` 见 **[`DOMAIN_SETUP.md`](./DOMAIN_SETUP.md)**。
+**已购域名 `chzautokeys.com` / `chzautokeys.cyou`：** HTTP/HTTPS 示例见 `deploy/aliyun/nginx/`（含 **主域统一** 与 **双域并列**）；DNS、证书、CORS、`docker-compose` 与 **2026-05-17 上线实录** 见 **[`DOMAIN_SETUP.md`](./DOMAIN_SETUP.md)**。HTTPS 上线后使用 `globuy.conf.https.example`，勿保留仅 `server_name _;` 的旧配置。
 
 ---
 

@@ -1,9 +1,8 @@
-# 生产 HTTPS（默认）：见 ../DOMAIN_SETUP.md、../nginx/README.md
-#   sudo cp .../globuy.conf.https.example /etc/nginx/sites-available/globuy
+# 双域名并列（.com 与 .cyou 均不 301 到对方）— 见 ../DOMAIN_SETUP.md §「双域名模式」
+#   sudo cp .../globuy.conf.https.dual-domain.example /etc/nginx/sites-available/globuy
 #   sudo nginx -t && sudo systemctl reload nginx
 #
-# 行为：HTTP → https://chzautokeys.com；HTTPS 上 www / .cyou 301 到 chzautokeys.com
-# 若 .cyou 不跳转 .com，改用 globuy.conf.https.dual-domain.example
+# CORS 须同时包含：https://chzautokeys.com,https://chzautokeys.cyou（及 www 若使用）
 
 server {
     listen 80;
@@ -17,7 +16,7 @@ server {
     }
 
     location / {
-        return 301 https://chzautokeys.com$request_uri;
+        return 301 https://$host$request_uri;
     }
 }
 
@@ -30,11 +29,6 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/chzautokeys.com/privkey.pem;
     include             /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
-
-    # 统一 canonical：仅 chzautokeys.com 提供内容，其余主机名跳转
-    if ($host != chzautokeys.com) {
-        return 301 https://chzautokeys.com$request_uri;
-    }
 
     root /opt/globuy/www/frontend;
     index index.html;

@@ -12,10 +12,11 @@ server {
     root /opt/globuy/www/frontend;
     index index.html;
 
-    # Let's Encrypt 校验（certbot --webroot 时使用；路径需与 certbot -w 一致）
-    location /.well-known/acme-challenge/ {
+    # Let's Encrypt：^~ 优先于下方 SPA 的 try_files，避免校验 URL 落到 index.html
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
         root /var/www/certbot;
-        try_files $uri =404;
+        allow all;
     }
 
     location / {
