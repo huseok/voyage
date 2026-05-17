@@ -41,6 +41,8 @@
 
 1. 在 **`voyage` 根目录** 新建 **`.env.docker.local`**（可提交到 Git；若含与生产不同的密码，仍建议勿把生产密钥写进此文件）。内容示例（**密码与 `POSTGRES_PASSWORD` 必须一致**）：
 
+可复制 **`.env.docker.local.example`** 为 **`.env.docker.local`**，或手写：
+
 ```env
 SPRING_PROFILES_ACTIVE=local
 SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/voyage_db
@@ -48,14 +50,31 @@ SPRING_DATASOURCE_USERNAME=voyage_user
 SPRING_DATASOURCE_PASSWORD=change_me
 POSTGRES_PASSWORD=change_me
 JWT_SECRET=change_me_to_a_long_secret_for_prod
+
+# 避免 Docker 构建每次下载 Gradle 发行包与大量 Maven 依赖（Docker Desktop 建议开启）
+DOCKER_BUILDKIT=1
+COMPOSE_DOCKER_CLI_BUILD=1
+DOCKERFILE=Dockerfile
 ```
 
 2. 启动（**必须**带 **`--profile local-db`** 与同一 **`--env-file`**）：
 
 ```powershell
 cd <本仓库>\voyage
+.\scripts\docker-local-up.ps1
+# 或：
 docker compose --profile local-db --env-file .env.docker.local up -d --build
 ```
+
+**本地构建速度（重要）**：
+
+| 方式 | 耗时 | 说明 |
+|------|------|------|
+| **`.\scripts\docker-local-up.ps1`**（默认） | 本机首次 bootJar 可能数分钟；**Docker 打镜像约几秒** | 本机 **`.\gradlew.bat bootJar`** + **`Dockerfile.fast`**，**不要**在容器里跑 `gradle dependencies`。 |
+| `docker compose ... --build` 且 **`DOCKERFILE=Dockerfile`** | 慢 | 仅在无本机 JDK 时用 **`.\scripts\docker-local-up.ps1 -InDocker`**。 |
+| 只起数据库、API 用 Gradle | 最快改代码 | **`docker compose ... up -d db`**，本机 **`SPRING_PROFILES_ACTIVE=local`** + **`.\gradlew.bat bootRun`**（见 §4）。 |
+
+`.env.docker.local` 默认 **`DOCKERFILE=Dockerfile.fast`**。改 Kotlin 后脚本会自动本机重编 JAR 再重建镜像。
 
 3. 停止并删掉 compose 内 Postgres 数据卷（慎用）：
 

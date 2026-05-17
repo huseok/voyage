@@ -15,7 +15,7 @@ import java.time.OffsetDateTime
 /**
  * 购物车服务：
  * - 增删改查、行勾选 [CartItemEntity.selected]、批量删除与清空。
- * - 金额汇总：同时返回 **全车小计** 与 **仅勾选行小计**，供前台结算条展示。
+ * - 金额汇总：全车小计；**已选可结算小计**（勾选且仍上架），不含下架勾选行。
  */
 @Service
 class CartService(
@@ -43,7 +43,8 @@ class CartService(
             val lineAmount = product.price.multiply(BigDecimal.valueOf(row.quantity.toLong()))
             totalAll = totalAll.add(lineAmount)
             currency = product.currency
-            if (row.selected) {
+            // 预估/结算仅统计「勾选且上架」行，下架勾选行不计入 selectedSubtotal
+            if (row.selected && product.isActive) {
                 totalSelected = totalSelected.add(lineAmount)
             }
             val media = thumbsByProduct[row.productId]

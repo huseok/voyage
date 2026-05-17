@@ -50,7 +50,7 @@ data class CartView(
     val items: List<CartItemView>,
     /** 购物车内全部行的小计（不按勾选）。 */
     val totalAmount: String,
-    /** 仅 [CartItemView.selected]==true 的行小计。 */
+    /** 勾选且仍上架（[CartItemView.productActive]）的行小计，供预估与结账。 */
     val selectedSubtotal: String,
     val currency: String,
 )

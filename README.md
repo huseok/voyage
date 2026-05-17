@@ -28,7 +28,7 @@ docker compose --env-file .env.render.local up -d --build
 
 若改用默认 **`.env`**，则 **`docker compose up -d --build`** 即可。
 
-**本机 Postgres（Docker）**：见 **`DEPLOY.md` §3.1**（`--profile local-db` + **`.env.docker.local`**）。
+**本机 Postgres（Docker）**：见 **`DEPLOY.md` §3.1**（`--profile local-db` + **`.env.docker.local`**；推荐 **`.\scripts\docker-local-up.ps1`**，已启用 Gradle 缓存、避免每次下载 wrapper zip）。
 
 **本机 Gradle（可选）** — `bootRun` 不自动读 env 文件，用 IDE 或 PowerShell 注入变量后再 **`.\gradlew.bat bootRun`**，见 **`DEPLOY.md` §4**。
 

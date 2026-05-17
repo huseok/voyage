@@ -98,7 +98,7 @@ data class ProductOptionInput(
 data class ProductSkuInput(
     @field:NotBlank val skuCode: String,
     @field:NotBlank val attrJson: String,
-    @field:DecimalMin("0.01") val salePrice: BigDecimal,
+    @field:DecimalMin("0.0") val salePrice: BigDecimal,
     @field:Min(0) val stockQty: Int,
     @field:DecimalMin("0.0") val weightKg: BigDecimal? = null,
     val isActive: Boolean = true

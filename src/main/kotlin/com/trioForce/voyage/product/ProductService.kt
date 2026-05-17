@@ -2,6 +2,7 @@ package com.trioForce.voyage.product
 
 import com.trioForce.voyage.audit.AuditLogEntity
 import com.trioForce.voyage.audit.AuditLogRepository
+import com.trioForce.voyage.category.CategoryRepository
 import com.trioForce.voyage.common.BizException
 import com.trioForce.voyage.common.snowflake.SnowflakeIdGenerator
 import com.trioForce.voyage.shipping.ShippingTemplateRepository
@@ -37,6 +38,7 @@ class ProductService(
     private val shippingTemplateRepository: ShippingTemplateRepository,
     private val snowflakeIdGenerator: SnowflakeIdGenerator,
     private val productLookup: ProductLookup,
+    private val categoryRepository: CategoryRepository,
 ) {
     /**
      * 前台分页列表：仅上架；支持国家、分类与关键词（标题、SKU、ID）。
@@ -272,10 +274,19 @@ class ProductService(
     fun upsertSkuMatrix(clientProductKey: String, req: ProductSkuMatrixUpsertRequest) {
         val entity = productLookup.requireEntityByClientKey(clientProductKey)
         val productId = entity.id!!
+        if (req.skus.isEmpty()) throw BizException("至少保存一条 SKU")
+        val dimensionNames = req.options.map { it.optionName.trim() }.filter { it.isNotBlank() }.distinct()
+        if (dimensionNames.isEmpty()) throw BizException("至少配置一个规格属性维度")
+        if (dimensionNames.size > MAX_SKU_ATTR_DIMENSIONS) {
+            throw BizException("规格属性维度最多 $MAX_SKU_ATTR_DIMENSIONS 个")
+        }
         // 基本校验：attrJson 必须是合法 JSON 对象，避免后续前端解析失败
         val skuCodeSet = mutableSetOf<String>()
         val attrSet = mutableSetOf<String>()
         req.skus.forEach {
+            if (it.salePrice < BigDecimal("0.01")) {
+                throw BizException("SKU 售价须 ≥ 0.01")
+            }
             val normalizedSku = it.skuCode.trim().uppercase()
             if (normalizedSku.isBlank()) throw BizException("skuCode cannot be blank")
             if (!skuCodeSet.add(normalizedSku)) throw BizException("duplicate skuCode: $normalizedSku")
@@ -289,8 +300,8 @@ class ProductService(
             if (canonical.isBlank()) throw BizException("attrJson cannot be empty object")
             if (!attrSet.add(canonical)) throw BizException("duplicate sku attrs: $canonical")
         }
-        productOptionRepository.deleteAllByProductId(productId)
-        productSkuRepository.deleteAllByProductId(productId)
+        productOptionRepository.hardDeleteAllByProductId(productId)
+        productSkuRepository.hardDeleteAllByProductId(productId)
         val now = OffsetDateTime.now()
         val options = req.options.map {
             ProductOptionEntity(
@@ -515,7 +526,16 @@ class ProductService(
 
     private fun categorySpec(categoryId: Long?): Specification<ProductEntity>? {
         if (categoryId == null) return null
-        return Specification { root, _, cb -> cb.equal(root.get<Long>("categoryId"), categoryId) }
+        val entity = categoryRepository.findById(categoryId).orElse(null)
+        val ids =
+            if (entity != null && entity.parentId == null) {
+                val childIds =
+                    categoryRepository.findAllByParentIdOrderBySortNoAscIdAsc(categoryId).mapNotNull { it.id }
+                listOf(categoryId) + childIds
+            } else {
+                listOf(categoryId)
+            }
+        return Specification { root, _, _ -> root.get<Long>("categoryId").`in`(ids) }
     }
 
     /** 管理端列表：币种精确匹配（忽略大小写） */
@@ -568,5 +588,10 @@ class ProductService(
         if (tc.isEmpty()) return TagFilter.None
         val tag = tagRepository.findByCode(tc.uppercase()).orElse(null) ?: return TagFilter.MissingCode
         return TagFilter.ById(tag.id!!)
+    }
+
+    companion object {
+        /** 与后台规格矩阵页、字典 `PRODUCT_SKU_ATTR` 上限一致 */
+        const val MAX_SKU_ATTR_DIMENSIONS = 10
     }
 }

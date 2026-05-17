@@ -3,6 +3,9 @@ package com.trioForce.voyage.product
 import jakarta.persistence.*
 import org.hibernate.annotations.Where
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.math.BigDecimal
 import java.time.OffsetDateTime
 
@@ -79,10 +82,19 @@ class ProductSkuEntity(
 
 interface ProductOptionRepository : JpaRepository<ProductOptionEntity, Long> {
     fun findAllByProductIdOrderBySortNoAscIdAsc(productId: Long): List<ProductOptionEntity>
-    fun deleteAllByProductId(productId: Long)
+
+    /**
+     * 物理删除该商品下全部规格项（含历史软删行），避免全量覆盖保存时 `sku_code` 唯一约束冲突。
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "DELETE FROM t_product_options WHERE product_id = :productId", nativeQuery = true)
+    fun hardDeleteAllByProductId(@Param("productId") productId: Long): Int
 }
 
 interface ProductSkuRepository : JpaRepository<ProductSkuEntity, Long> {
     fun findAllByProductIdOrderByIdAsc(productId: Long): List<ProductSkuEntity>
-    fun deleteAllByProductId(productId: Long)
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "DELETE FROM t_product_skus WHERE product_id = :productId", nativeQuery = true)
+    fun hardDeleteAllByProductId(@Param("productId") productId: Long): Int
 }
