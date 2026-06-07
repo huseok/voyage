@@ -34,7 +34,7 @@ sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-backend-full.sh            /u
 sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-compile-backend-quick.sh /usr/local/bin/globuy-compile-quick
 sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-compile-backend-full.sh  /usr/local/bin/globuy-compile-full
 sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-frontend.sh              /usr/local/bin/globuy-frontend
-sudo ln -sf /opt/globuy/repo/voyage/deploy/aliyun/release.sh                /usr/local/bin/globuy-release
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-release.sh               /usr/local/bin/globuy-release
 
 # 可选：保留旧习惯路径 /opt/publish-backend.sh
 sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-backend-quick.sh /opt/publish-backend.sh
@@ -56,7 +56,7 @@ which globuy-stop globuy-restart globuy-backend-quick
 | `globuy-compile-full` | `deploy/publish-compile-backend-full.sh` | 仅宿主 `clean bootJar` |
 | `globuy-backend-full` | `deploy/publish-backend-full.sh` | Docker 无缓存重建（**小内存机勿用**） |
 | `globuy-frontend` | `deploy/publish-frontend.sh` | 仅前端 build + rsync |
-| `globuy-release` | `deploy/aliyun/release.sh` | 前后端一起发版 |
+| `globuy-release` | `deploy/publish-release.sh` | 前后端一起发版 |
 
 ### 小内存机发版（约 1.6～2GB、无 Swap 或 Swap 较小）
 

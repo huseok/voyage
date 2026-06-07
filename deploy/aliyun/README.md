@@ -31,7 +31,7 @@ sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-compile-backend-quick.sh /usr
 sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-compile-backend-full.sh  /usr/local/bin/globuy-compile-full
 sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-stop.sh      /usr/local/bin/globuy-stop
 sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-restart.sh   /usr/local/bin/globuy-restart
-sudo ln -sf /opt/globuy/repo/voyage/deploy/aliyun/release.sh    /usr/local/bin/globuy-release
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-release.sh   /usr/local/bin/globuy-release
 sudo chmod +x /opt/globuy/repo/voyage/deploy/publish-*.sh \
               /opt/globuy/repo/voyage/deploy/aliyun/*.sh
 ```
@@ -91,7 +91,7 @@ ln -sf /opt/globuy/repo/voyage/deploy/publish-compile-backend-quick.sh ~/bin/glo
 ln -sf /opt/globuy/repo/voyage/deploy/publish-compile-backend-full.sh  ~/bin/globuy-compile-full
 ln -sf /opt/globuy/repo/voyage/deploy/publish-stop.sh      ~/bin/globuy-stop
 ln -sf /opt/globuy/repo/voyage/deploy/publish-restart.sh   ~/bin/globuy-restart
-ln -sf /opt/globuy/repo/voyage/deploy/aliyun/release.sh    ~/bin/globuy-release
+ln -sf /opt/globuy/repo/voyage/deploy/publish-release.sh   ~/bin/globuy-release
 chmod +x ~/bin/globuy-*
 grep -q 'export PATH="$HOME/bin:$PATH"' ~/.bashrc || echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc

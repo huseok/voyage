@@ -2,6 +2,17 @@
 # deploy/aliyun 脚本共用：日志、路径默认值、Docker Compose V2 探测。
 # 由 stop.sh / restart.sh / release.sh 等 source，勿直接执行。
 
+# 解析脚本真实目录（globuy-release 等软链到 /usr/local/bin 时 BASH_SOURCE 会指向链接路径）。
+globuy_resolve_script_dir() {
+  local src="${1:?}"
+  if command -v readlink >/dev/null 2>&1; then
+    local resolved
+    resolved=$(readlink -f "$src" 2>/dev/null || true)
+    [[ -n "$resolved" ]] && src="$resolved"
+  fi
+  cd "$(dirname "$src")" && pwd
+}
+
 # 若调用方已定义 log/die（如 release.sh 用 [release] 前缀），则复用调用方实现。
 if ! declare -f log >/dev/null 2>&1; then
   log() { printf '[globuy] %s\n' "$*"; }

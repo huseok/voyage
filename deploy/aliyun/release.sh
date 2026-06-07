@@ -11,9 +11,9 @@ set -euo pipefail
 log() { printf '[release] %s\n' "$*"; }
 die() { echo "[release] 错误: $*" >&2; exit 1; }
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=deploy/aliyun/_common.sh
-source "$SCRIPT_DIR/_common.sh"
+source "${VOYAGE_REPO:-/opt/globuy/repo/voyage}/deploy/aliyun/_common.sh"
+SCRIPT_DIR="$(globuy_resolve_script_dir "${BASH_SOURCE[0]}")"
 
 # 快速步骤失败时打印可复制的「全量」命令（依赖 RELEASE_VERBOSE / --frontend-clean / --backend-full 等）
 print_full_retry_commands() {

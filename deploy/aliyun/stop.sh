@@ -10,9 +10,9 @@
 # 选项见 --help。环境变量 GLOBUY_ROOT / VOYAGE_REPO / ENV_FILE 可覆盖默认路径。
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=deploy/aliyun/_common.sh
-source "$SCRIPT_DIR/_common.sh"
+source "${VOYAGE_REPO:-/opt/globuy/repo/voyage}/deploy/aliyun/_common.sh"
+SCRIPT_DIR="$(globuy_resolve_script_dir "${BASH_SOURCE[0]}")"
 
 DO_FRONTEND=1
 DO_BACKEND=1
