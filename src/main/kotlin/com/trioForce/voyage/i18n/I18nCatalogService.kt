@@ -51,18 +51,37 @@ class I18nCatalogService(
         return repository.findById(normalized).map { it.content }.orElse(null)
     }
 
-    /** 分页检索扁平化后的文案条目 */
+    /** 分页检索扁平化后的文案条目（支持对照语言文案与 key 前缀筛选） */
     @Transactional(readOnly = true)
-    fun listEntries(locale: String, page: Int, size: Int, q: String?): I18nCatalogEntriesPage {
+    fun listEntries(
+        locale: String,
+        page: Int,
+        size: Int,
+        q: String?,
+        refLocale: String?,
+        prefix: String?,
+    ): I18nCatalogEntriesPage {
         val normalized = normalizeLocale(locale)
         val content = getCatalog(normalized)
         val keyword = q?.trim().orEmpty().lowercase()
+        val prefixNorm = prefix?.trim().orEmpty()
+        val refFlat: Map<String, String> = refLocale?.trim()?.takeIf { it.isNotEmpty() }?.let { ref ->
+            findCatalog(ref)?.let { cat ->
+                I18nCatalogUtils.flatten(cat).toMap()
+            }
+        } ?: emptyMap()
         val all = I18nCatalogUtils.flatten(content)
             .map { (key, value) -> I18nCatalogEntryView(key = key, value = value) }
             .filter { row ->
-                keyword.isEmpty() ||
-                    row.key.lowercase().contains(keyword) ||
-                    row.value.lowercase().contains(keyword)
+                val prefixOk = prefixNorm.isEmpty() ||
+                    row.key == prefixNorm ||
+                    row.key.startsWith("$prefixNorm.")
+                if (!prefixOk) return@filter false
+                if (keyword.isEmpty()) return@filter true
+                val refText = refFlat[row.key].orEmpty().lowercase()
+                row.key.lowercase().contains(keyword) ||
+                    row.value.lowercase().contains(keyword) ||
+                    refText.contains(keyword)
             }
             .sortedBy { it.key }
         val safePage = page.coerceAtLeast(1)

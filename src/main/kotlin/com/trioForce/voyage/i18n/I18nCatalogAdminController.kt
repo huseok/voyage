@@ -30,8 +30,10 @@ class I18nCatalogAdminController(
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
         @RequestParam(required = false) q: String?,
+        @RequestParam(required = false) refLocale: String?,
+        @RequestParam(required = false) prefix: String?,
     ): ApiResponse<I18nCatalogEntriesPage> =
-        ok(catalogService.listEntries(locale, page, size, q))
+        ok(catalogService.listEntries(locale, page, size, q, refLocale, prefix))
 
     @PutMapping("/api/v1/admin/i18n/catalogs/{locale}/entries")
     fun patchEntries(
