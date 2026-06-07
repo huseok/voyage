@@ -59,3 +59,19 @@ allOpen {
 tasks.withType<Test> {
 	useJUnitPlatform()
 }
+
+/** bootJar 成功后写入标记，供 Dockerfile.fast 校验「已本机编译」 */
+tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
+	doLast {
+		val jar = archiveFile.get().asFile
+		val stamp = layout.buildDirectory.file("boot-jar.stamp").get().asFile
+		stamp.parentFile.mkdirs()
+		stamp.writeText(
+			buildString {
+				appendLine("jar=${jar.name}")
+				appendLine("builtAt=${System.currentTimeMillis()}")
+				appendLine("jarBytes=${jar.length()}")
+			},
+		)
+	}
+}

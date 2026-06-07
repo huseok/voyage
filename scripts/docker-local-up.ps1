@@ -1,8 +1,8 @@
-# 本地默认：本机 gradlew bootJar（走 Windows 缓存）+ Dockerfile.fast 打镜像（数秒）
-# 用法：
-#   .\scripts\docker-local-up.ps1              # 推荐
-#   .\scripts\docker-local-up.ps1 -InDocker  # 强制在容器里 Gradle 编译（慢）
-#   .\scripts\docker-local-up.ps1 -NoBuild   # 不重建镜像，只 up
+# Local dev: host gradlew bootJar + Dockerfile.fast (seconds, no Gradle in Docker).
+# Usage:
+#   .\scripts\docker-local-up.ps1
+#   .\scripts\docker-local-up.ps1 -InDocker
+#   .\scripts\docker-local-up.ps1 -NoBuild
 param(
     [switch]$InDocker,
     [switch]$NoBuild,
@@ -18,7 +18,7 @@ $env:COMPOSE_DOCKER_CLI_BUILD = "1"
 
 $envFile = Join-Path $Root ".env.docker.local"
 if (-not (Test-Path $envFile)) {
-    Write-Host "缺少 .env.docker.local，请复制 .env.docker.local.example" -ForegroundColor Yellow
+    Write-Host "Missing .env.docker.local - copy from .env.docker.local.example" -ForegroundColor Yellow
     exit 1
 }
 
@@ -53,28 +53,44 @@ function Test-NeedHostBootJar {
 
 if ($InDocker) {
     $env:DOCKERFILE = "Dockerfile"
-    Write-Host "容器内编译（Dockerfile，较慢，仅无本机 JDK 或需对齐 CI 时用）" -ForegroundColor Yellow
+    Write-Host "In-Docker Gradle build (Dockerfile, slow) - use only without host JDK" -ForegroundColor Yellow
 } else {
     $env:DOCKERFILE = "Dockerfile.fast"
     if (Test-NeedHostBootJar) {
-        Write-Host "本机编译 bootJar（Gradle 缓存位于用户目录 .gradle，仅首次或改代码后较慢）..." -ForegroundColor Cyan
+        Write-Host "Host bootJar (uses ~/.gradle cache; slow on first run or after code changes)..." -ForegroundColor Cyan
         & .\gradlew.bat bootJar -x test --no-daemon
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     } else {
-        Write-Host "复用已有 build\libs\*.jar，跳过本机编译" -ForegroundColor DarkGray
+        Write-Host "Reusing existing build\libs\*.jar, skip host compile" -ForegroundColor DarkGray
     }
     if (-not (Get-LatestJar)) {
-        Write-Host "未生成 JAR，请检查 bootJar 输出" -ForegroundColor Red
+        Write-Host "No JAR in build\libs - bootJar failed?" -ForegroundColor Red
         exit 1
     }
-    Write-Host "Docker 仅打包 JAR（Dockerfile.fast）" -ForegroundColor Cyan
+    Write-Host "Docker image: COPY JAR only (Dockerfile.fast)" -ForegroundColor Cyan
 }
 
-$composeArgs = @("compose", "--profile", "local-db", "--env-file", $envFile)
+$composeArgs = @("compose", "--profile", "local-db", "--env-file", $envFile, "up", "-d")
 if (-not $NoBuild) { $composeArgs += "--build" }
-$composeArgs += @("up", "-d")
 
-Write-Host "执行: docker $($composeArgs -join ' ')" -ForegroundColor DarkGray
+Write-Host "Running: docker $($composeArgs -join ' ')" -ForegroundColor DarkGray
 & docker @composeArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-Write-Host "已启动。API: http://localhost:8080" -ForegroundColor Green
+
+$healthUrl = "http://127.0.0.1:8080/api/v1/auth/captcha"
+Write-Host "Waiting for API (Spring Boot may take ~60s after container start)..." -ForegroundColor Cyan
+$ready = $false
+for ($i = 0; $i -lt 40; $i++) {
+    try {
+        $null = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 3
+        $ready = $true
+        break
+    } catch {
+        Start-Sleep -Seconds 3
+    }
+}
+if ($ready) {
+    Write-Host "API is ready: http://localhost:8080" -ForegroundColor Green
+} else {
+    Write-Host "Containers started but API not responding yet. Check: docker logs voyage-api --tail 80" -ForegroundColor Yellow
+}

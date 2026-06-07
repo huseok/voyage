@@ -1,7 +1,20 @@
-# 本机已执行：.\gradlew.bat bootJar -x test 且存在 build/libs/*.jar 时使用。
-# 构建几乎只复制 JAR，几秒完成。见 DEPLOY.md「快速镜像」。
+# 本机已执行：.\gradlew.bat bootJar -x test 且存在 build/libs/*.jar + build/boot-jar.stamp
+# Docker 仅复制 JAR，不在容器内跑 Gradle（本地/服务器发版均推荐）。
 FROM eclipse-temurin:17-jre
 WORKDIR /app
+COPY build/boot-jar.stamp /tmp/boot-jar.stamp
 COPY build/libs/*.jar app.jar
+RUN set -e; \
+    if [ ! -s /tmp/boot-jar.stamp ]; then \
+      echo "ERROR: 缺少 build/boot-jar.stamp，请先在宿主机执行: ./gradlew bootJar -x test"; \
+      echo "或 Windows: .\\scripts\\docker-local-up.ps1"; \
+      exit 1; \
+    fi; \
+    if [ ! -s app.jar ]; then \
+      echo "ERROR: 缺少 build/libs/*.jar，请先在宿主机执行 bootJar"; \
+      exit 1; \
+    fi; \
+    echo "使用本机 bootJar 产物打包镜像（未在容器内编译）"
+
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

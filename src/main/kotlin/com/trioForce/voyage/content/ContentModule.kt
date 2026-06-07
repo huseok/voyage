@@ -14,7 +14,9 @@ import jakarta.persistence.*
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
+import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.annotations.Where
+import org.hibernate.type.SqlTypes
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -41,6 +43,9 @@ class SiteContentEntity(
     var imageUrl: String? = null,
     @Column(name = "action_url", length = 500)
     var actionUrl: String? = null,
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    var i18n: Map<String, Map<String, String>> = emptyMap(),
     @Column(name = "sort_no", nullable = false)
     var sortNo: Int = 0,
     @Column(name = "is_active", nullable = false)
@@ -108,6 +113,7 @@ data class SiteContentUpsertRequest(
     val title: String? = null,
     val subtitle: String? = null,
     val body: String? = null,
+    val i18n: Map<String, Map<String, String>>? = null,
     val imageUrl: String? = null,
     val actionUrl: String? = null,
     val sortNo: Int = 0,
@@ -121,6 +127,7 @@ data class SiteContentView(
     val title: String?,
     val subtitle: String?,
     val body: String?,
+    val i18n: Map<String, Map<String, String>> = emptyMap(),
     val imageUrl: String?,
     val actionUrl: String?,
     val sortNo: Int,
@@ -177,11 +184,13 @@ class ContentService(
         val now = OffsetDateTime.now()
         val key = req.contentKey.trim().uppercase()
         val existed = siteContentRepository.findByContentKey(key)
+        val (i18nMap, title, subtitle, body) = resolveSiteContentI18n(req)
         val entity = existed?.apply {
             contentType = req.contentType.trim().uppercase()
-            title = req.title?.trim()
-            subtitle = req.subtitle?.trim()
-            body = req.body?.trim()
+            this.title = title
+            this.subtitle = subtitle
+            this.body = body
+            i18n = i18nMap
             imageUrl = req.imageUrl?.trim()
             actionUrl = req.actionUrl?.trim()
             sortNo = req.sortNo
@@ -190,9 +199,10 @@ class ContentService(
         } ?: SiteContentEntity(
             contentKey = key,
             contentType = req.contentType.trim().uppercase(),
-            title = req.title?.trim(),
-            subtitle = req.subtitle?.trim(),
-            body = req.body?.trim(),
+            title = title,
+            subtitle = subtitle,
+            body = body,
+            i18n = i18nMap,
             imageUrl = req.imageUrl?.trim(),
             actionUrl = req.actionUrl?.trim(),
             sortNo = req.sortNo,
@@ -234,9 +244,60 @@ class ContentService(
         cooperationRepository.save(row)
     }
 
-    private fun toContentView(e: SiteContentEntity): SiteContentView =
-        SiteContentView(e.id!!, e.contentKey, e.contentType, e.title, e.subtitle, e.body, e.imageUrl, e.actionUrl, e.sortNo, e.isActive)
+    private fun toContentView(e: SiteContentEntity): SiteContentView {
+        val i18n = if (e.i18n.isNotEmpty()) {
+            e.i18n
+        } else {
+            mapOf(
+                "en-US" to mapOf(
+                    "title" to (e.title.orEmpty()),
+                    "subtitle" to (e.subtitle.orEmpty()),
+                    "body" to (e.body.orEmpty()),
+                ).filterValues { it.isNotBlank() },
+            )
+        }
+        return SiteContentView(
+            e.id!!, e.contentKey, e.contentType, e.title, e.subtitle, e.body, i18n,
+            e.imageUrl, e.actionUrl, e.sortNo, e.isActive,
+        )
+    }
+
+    private fun resolveSiteContentI18n(req: SiteContentUpsertRequest): SiteContentI18nResolved {
+        val map = linkedMapOf<String, Map<String, String>>()
+        req.i18n?.forEach { (locale, fields) ->
+            val loc = locale.trim()
+            if (loc.isEmpty()) return@forEach
+            val bucket = linkedMapOf<String, String>()
+            fields.forEach { (k, v) ->
+                val key = k.trim()
+                val valStr = v.trim()
+                if (key.isNotEmpty() && valStr.isNotEmpty()) bucket[key] = valStr
+            }
+            if (bucket.isNotEmpty()) map[loc] = bucket
+        }
+        if (map.isEmpty()) {
+            val bucket = linkedMapOf<String, String>()
+            req.title?.trim()?.takeIf { it.isNotEmpty() }?.let { bucket["title"] = it }
+            req.subtitle?.trim()?.takeIf { it.isNotEmpty() }?.let { bucket["subtitle"] = it }
+            req.body?.trim()?.takeIf { it.isNotEmpty() }?.let { bucket["body"] = it }
+            if (bucket.isNotEmpty()) map["en-US"] = bucket
+        }
+        val en = map["en-US"].orEmpty()
+        return SiteContentI18nResolved(
+            i18n = map,
+            title = en["title"]?.trim()?.ifEmpty { null },
+            subtitle = en["subtitle"]?.trim()?.ifEmpty { null },
+            body = en["body"]?.trim()?.ifEmpty { null },
+        )
+    }
 }
+
+private data class SiteContentI18nResolved(
+    val i18n: Map<String, Map<String, String>>,
+    val title: String?,
+    val subtitle: String?,
+    val body: String?,
+)
 
 @RestController
 class ContentController(private val contentService: ContentService) {

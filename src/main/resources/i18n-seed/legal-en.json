@@ -1,0 +1,41 @@
+{
+  "notFound": "Document not found.",
+  "versionLabel": "Version",
+  "lastUpdated": "Last updated May 2026",
+  "terms": {
+    "pageTitle": "Terms of Service",
+    "s1Title": "1. Agreement",
+    "s1Body": "By creating an account or placing an order on CHZautokeys (the \"Platform\"), you agree to these Terms of Service. If you register on behalf of a company, you represent that you are authorized to bind that entity.\n\nIf you do not agree, do not use the Platform.",
+    "s2Title": "2. Accounts",
+    "s2Body": "You must provide accurate registration information, keep your credentials secure, and notify us promptly of unauthorized use. We may suspend or close accounts that violate these Terms or applicable law.\n\nBusiness buyers should use a company email where possible so we can support quotes, invoices, and order correspondence.",
+    "s3Title": "3. Orders, pricing, and payment",
+    "s3Body": "Product listings show indicative prices, MOQs, and specifications. Final amounts, taxes, duties, and shipping are confirmed at checkout or in a written quote where applicable.\n\nWe may refuse or cancel orders for stock, compliance, fraud prevention, or pricing errors. Payment terms follow the method selected at checkout or agreed in writing.",
+    "s4Title": "4. Shipping and delivery",
+    "s4Body": "Delivery times are estimates. Risk of loss passes according to the Incoterm or shipping method shown at checkout. You are responsible for providing a complete delivery address and for import clearance, duties, and local taxes unless otherwise agreed in writing.",
+    "s5Title": "5. Returns and quality claims",
+    "s5Body": "Defective or materially non-conforming goods must be reported within the period stated on the order or product page, with photos and order reference. Approved returns or replacements are handled per our returns policy and applicable consumer laws in your jurisdiction.\n\nCustom, made-to-order, or clearly marked non-returnable items may be excluded unless required by law.",
+    "s6Title": "6. Limitation of liability",
+    "s6Body": "To the fullest extent permitted by law, CHZautokeys and its suppliers are not liable for indirect, incidental, or consequential damages. Our aggregate liability for any claim relating to an order is limited to the amount you paid for that order.\n\nNothing in these Terms limits liability that cannot be limited under applicable law.",
+    "s7Title": "7. Changes and contact",
+    "s7Body": "We may update these Terms by posting a new version on the Platform and updating the version number shown at registration. Material changes may require renewed acceptance where required by law.\n\nQuestions: contact us via the Contact page or your account manager."
+  },
+  "privacy": {
+    "pageTitle": "Privacy Policy",
+    "s1Title": "1. Who we are",
+    "s1Body": "This Privacy Policy explains how CHZautokeys (\"we\", \"us\") collects and uses personal data when you use our website, register an account, or place orders.\n\nWe act as controller for account and order data unless otherwise stated in a separate data processing agreement with your organization.",
+    "s2Title": "2. Data we collect",
+    "s2Body": "Registration: name, email, optional phone, country, company name, and salutation.\n\nOrders and checkout: delivery address, contact details, order history, payment status (we do not store full card numbers on our servers).\n\nTechnical: IP address, browser type, cookies, and security logs.",
+    "s3Title": "3. How we use data",
+    "s3Body": "We use your data to create and manage your account, process orders, provide customer support, prevent fraud, improve the Platform, and comply with legal obligations.\n\nWith your consent or where permitted, we may send service or marketing communications; you can opt out of marketing at any time.",
+    "s4Title": "4. Legal bases (EEA/UK)",
+    "s4Body": "Where GDPR or UK GDPR applies, we rely on: contract (fulfilling orders), legitimate interests (security, analytics, B2B relationship management), legal obligation, and consent where required (e.g. certain marketing).",
+    "s5Title": "5. Sharing and processors",
+    "s5Body": "We share data with payment providers, carriers, cloud hosting, email/SMS tools, and professional advisers only as needed to operate the Platform. Processors are bound by contracts requiring appropriate safeguards.\n\nWe do not sell your personal data.",
+    "s6Title": "6. Retention and security",
+    "s6Body": "We retain account and order records as long as needed for legal, tax, and dispute purposes, then delete or anonymize where possible. We apply technical and organizational measures appropriate to the risk, including access controls and encryption in transit.",
+    "s7Title": "7. Your rights",
+    "s7Body": "Depending on your location, you may have rights to access, correct, delete, restrict, or port your data, and to object to certain processing. Contact us to exercise these rights; you may also lodge a complaint with your supervisory authority.",
+    "s8Title": "8. International transfers and updates",
+    "s8Body": "Data may be processed in countries other than your own; we use appropriate safeguards for cross-border transfers where required.\n\nWe may update this Policy by posting a new version and updating the version number at registration. Continued use after changes constitutes acknowledgment where permitted by law."
+  }
+}

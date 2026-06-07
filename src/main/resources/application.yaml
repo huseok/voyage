@@ -39,6 +39,16 @@ logging:
     org.hibernate.SQL: debug
 
 voyage:
+  exchange:
+    # 定时任务检查间隔（毫秒），默认 30 分钟；实际拉取频率由库内 refresh_interval_hours 控制
+    scheduler-check-ms: ${VOYAGE_EXCHANGE_SCHEDULER_CHECK_MS:1800000}
+  i18n:
+    translation:
+      provider: ${VOYAGE_I18N_PROVIDER:deepl}
+      api-key: ${VOYAGE_I18N_API_KEY:}
+      api-url: ${VOYAGE_I18N_API_URL:https://api-free.deepl.com}
+      default-source-locale: en-US
+      max-texts-per-request: 50
   snowflake:
     worker-id: ${VOYAGE_SNOWFLAKE_WORKER_ID:1}
     datacenter-id: ${VOYAGE_SNOWFLAKE_DATACENTER_ID:1}

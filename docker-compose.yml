@@ -1,5 +1,10 @@
 # 默认：仅 voyage-api + 远端库（cloud）。本地 Postgres 见 profile local-db + --env-file（DEPLOY.md §3.1）。
 # ${...} 由 shell / .env / --env-file 替换；勿提交密钥。
+#
+# 本地开发（推荐，不在 Docker 内编译）：
+#   .\scripts\docker-local-up.ps1
+# 或：.\gradlew.bat bootJar -x test 后再 docker compose --profile local-db --env-file .env.docker.local up -d --build
+# 勿单独 docker compose up --build（Dockerfile.fast 只会复制已有 JAR，不会编译新代码）。
 services:
   db:
     profiles: ["local-db"]
@@ -37,6 +42,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
       JWT_SECRET: ${JWT_SECRET:-change_me_to_a_long_secret_for_prod}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174}
+      # DeepL 机器翻译（后台一键翻译 / i18n:sync）；留空则翻译接口返回未配置
+      VOYAGE_I18N_API_KEY: ${VOYAGE_I18N_API_KEY:-}
+      VOYAGE_I18N_API_URL: ${VOYAGE_I18N_API_URL:-https://api-free.deepl.com}
+      VOYAGE_I18N_PROVIDER: ${VOYAGE_I18N_PROVIDER:-deepl}
     ports:
       - "${API_PORT:-8080}:8080"
 

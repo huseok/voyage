@@ -43,6 +43,8 @@ class SecurityConfig(
                 it.requestMatchers("/api/v1/tags").permitAll()
                 it.requestMatchers("/api/v1/site/contents", "/api/v1/site/promos").permitAll()
                 it.requestMatchers("/api/v1/storefront/settings").permitAll()
+                it.requestMatchers("/api/v1/exchange-rates").permitAll()
+                it.requestMatchers("/api/v1/i18n/catalogs/**").permitAll()
                 it.requestMatchers("/media/**").permitAll()
                 it.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 // 后台接口必须 ADMIN 角色

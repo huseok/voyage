@@ -3,7 +3,10 @@ package com.trioForce.voyage.tag
 import com.trioForce.voyage.common.ApiResponse
 import com.trioForce.voyage.common.BizException
 import com.trioForce.voyage.common.ok
+import com.trioForce.voyage.i18n.I18nLocaleSupport
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
@@ -31,6 +34,9 @@ class TagEntity(
     var nameZh: String,
     @Column(name = "name_en", nullable = false, length = 120)
     var nameEn: String,
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    var i18n: Map<String, String> = emptyMap(),
     @Column(name = "sort_no", nullable = false)
     var sortNo: Int = 0,
     @Column(name = "is_active", nullable = false)
@@ -77,6 +83,7 @@ data class TagView(
     val code: String,
     val nameZh: String,
     val nameEn: String,
+    val i18n: Map<String, String> = emptyMap(),
     val sortNo: Int = 0,
     val isActive: Boolean = true,
     val showOnStorefront: Boolean = true,
@@ -86,15 +93,37 @@ data class TagUpsertRequest(
     @field:NotBlank
     @field:Pattern(regexp = "^[A-Za-z0-9][A-Za-z0-9_-]{1,62}$", message = "tag code: 2-64 chars, letters, digits, _ or -")
     val code: String,
-    @field:NotBlank val nameZh: String,
-    @field:NotBlank val nameEn: String,
+    val nameZh: String? = null,
+    val nameEn: String? = null,
+    val i18n: Map<String, String>? = null,
     val sortNo: Int = 0,
     val isActive: Boolean = true,
     val showOnStorefront: Boolean = true,
 )
 
-private fun TagEntity.toView(): TagView =
-    TagView(id!!, code, nameZh, nameEn, sortNo, isActive, showOnStorefront)
+private fun TagEntity.toView(): TagView {
+    val map = if (i18n.isNotEmpty()) i18n else I18nLocaleSupport.fromBilingual(nameZh, nameEn)
+    return TagView(id!!, code, nameZh, nameEn, map, sortNo, isActive, showOnStorefront)
+}
+
+private fun resolveTagI18n(req: TagUpsertRequest): Triple<Map<String, String>, String, String> {
+    val map = linkedMapOf<String, String>()
+    req.i18n?.forEach { (k, v) ->
+        val key = k.trim()
+        val valStr = v.trim()
+        if (key.isNotEmpty() && valStr.isNotEmpty()) map[key] = valStr
+    }
+    if (map.isEmpty()) {
+        val zh = req.nameZh?.trim().orEmpty()
+        val en = req.nameEn?.trim().orEmpty()
+        if (en.isBlank()) throw BizException("英文名称（en-US）不能为空")
+        return Triple(I18nLocaleSupport.fromBilingual(zh.ifEmpty { en }, en), zh.ifEmpty { en }, en)
+    }
+    val en = map["en-US"]?.trim().orEmpty()
+    if (en.isBlank()) throw BizException("英文名称（en-US）不能为空")
+    val (zh, enCol) = I18nLocaleSupport.syncBilingualColumns(map)
+    return Triple(map, zh, enCol)
+}
 
 @Service
 class TagService(
@@ -111,11 +140,13 @@ class TagService(
     @Transactional
     fun create(req: TagUpsertRequest): Long {
         val now = OffsetDateTime.now()
+        val (i18nMap, nameZh, nameEn) = resolveTagI18n(req)
         val entity = tagRepository.save(
             TagEntity(
                 code = req.code.trim().uppercase(),
-                nameZh = req.nameZh.trim(),
-                nameEn = req.nameEn.trim(),
+                nameZh = nameZh,
+                nameEn = nameEn,
+                i18n = i18nMap,
                 sortNo = req.sortNo,
                 isActive = req.isActive,
                 showOnStorefront = req.showOnStorefront,
@@ -133,8 +164,10 @@ class TagService(
         if (entity.code != newCode) {
             throw BizException("tag code cannot be changed")
         }
-        entity.nameZh = req.nameZh.trim()
-        entity.nameEn = req.nameEn.trim()
+        val (i18nMap, nameZh, nameEn) = resolveTagI18n(req)
+        entity.nameZh = nameZh
+        entity.nameEn = nameEn
+        entity.i18n = i18nMap
         entity.sortNo = req.sortNo
         entity.isActive = req.isActive
         entity.showOnStorefront = req.showOnStorefront

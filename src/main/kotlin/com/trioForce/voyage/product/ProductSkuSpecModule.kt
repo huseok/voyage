@@ -4,7 +4,10 @@ import com.trioForce.voyage.common.ApiResponse
 import com.trioForce.voyage.common.BizException
 import com.trioForce.voyage.common.logging.LogUtil
 import com.trioForce.voyage.common.ok
+import com.trioForce.voyage.i18n.I18nLocaleSupport
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
@@ -27,6 +30,9 @@ class SkuAttrDimensionEntity(
     var code: String,
     @Column(nullable = false, length = 120)
     var name: String,
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    var i18n: Map<String, String> = emptyMap(),
     @Column(name = "sort_no", nullable = false)
     var sortNo: Int = 0,
     @Column(name = "is_active", nullable = false)
@@ -48,6 +54,9 @@ class SkuAttrValueEntity(
     var code: String,
     @Column(nullable = false, length = 120)
     var name: String,
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    var i18n: Map<String, String> = emptyMap(),
     @Column(name = "sort_no", nullable = false)
     var sortNo: Int = 0,
     @Column(name = "is_active", nullable = false)
@@ -75,6 +84,7 @@ data class SkuAttrValueView(
     val dimensionId: Long,
     val code: String,
     val name: String,
+    val i18n: Map<String, String> = emptyMap(),
     val sortNo: Int,
     val isActive: Boolean,
 )
@@ -83,6 +93,7 @@ data class SkuAttrDimensionView(
     val id: Long,
     val code: String,
     val name: String,
+    val i18n: Map<String, String> = emptyMap(),
     val sortNo: Int,
     val isActive: Boolean,
     val values: List<SkuAttrValueView> = emptyList(),
@@ -92,7 +103,8 @@ data class SkuAttrDimensionUpsertRequest(
     @field:NotBlank
     @field:Pattern(regexp = "^[A-Z0-9][A-Z0-9_]{0,62}$", message = "code: uppercase letters, digits, underscore")
     val code: String,
-    @field:NotBlank val name: String,
+    val name: String? = null,
+    val i18n: Map<String, String>? = null,
     val sortNo: Int = 0,
     val isActive: Boolean = true,
 )
@@ -101,7 +113,8 @@ data class SkuAttrValueUpsertRequest(
     @field:NotBlank
     @field:Pattern(regexp = "^[A-Z0-9][A-Z0-9_]{0,62}$", message = "code: uppercase letters, digits, underscore")
     val code: String,
-    @field:NotBlank val name: String,
+    val name: String? = null,
+    val i18n: Map<String, String>? = null,
     val sortNo: Int = 0,
     val isActive: Boolean = true,
 )
@@ -138,7 +151,7 @@ class ProductSkuSpecService(
                 valueRepository.findAllByDimensionIdOrderBySortNoAscIdAsc(dim.id!!)
                     .filter { it.isActive }
                     .map { toValueView(it) }
-            SkuAttrDimensionView(dim.id!!, dim.code, dim.name, dim.sortNo, dim.isActive, values)
+            SkuAttrDimensionView(dim.id!!, dim.code, dim.name, resolveNameI18n(dim.i18n, dim.name), dim.sortNo, dim.isActive, values)
         }
     }
 
@@ -155,11 +168,13 @@ class ProductSkuSpecService(
         val code = req.code.trim().uppercase()
         if (dimensionRepository.findByCode(code) != null) throw BizException("属性维度编码已存在")
         val now = OffsetDateTime.now()
+        val (i18nMap, name) = resolveSkuNameI18n(req.name, req.i18n)
         val id =
             dimensionRepository.save(
                 SkuAttrDimensionEntity(
                     code = code,
-                    name = req.name.trim(),
+                    name = name,
+                    i18n = i18nMap,
                     sortNo = req.sortNo,
                     isActive = req.isActive,
                     createdAt = now,
@@ -191,7 +206,9 @@ class ProductSkuSpecService(
         val entity = ensureDimension(id)
         val newCode = req.code.trim().uppercase()
         if (entity.code != newCode) throw BizException("属性维度编码创建后不可修改")
-        entity.name = req.name.trim()
+        val (i18nMap, name) = resolveSkuNameI18n(req.name, req.i18n)
+        entity.name = name
+        entity.i18n = i18nMap
         entity.sortNo = req.sortNo
         entity.isActive = req.isActive
         entity.updatedAt = OffsetDateTime.now()
@@ -213,12 +230,14 @@ class ProductSkuSpecService(
         val code = req.code.trim().uppercase()
         assertValueCodeUnique(dimensionId, code, null)
         val now = OffsetDateTime.now()
+        val (i18nMap, name) = resolveSkuNameI18n(req.name, req.i18n)
         val id =
             valueRepository.save(
                 SkuAttrValueEntity(
                     dimensionId = dim.id!!,
                     code = code,
-                    name = req.name.trim(),
+                    name = name,
+                    i18n = i18nMap,
                     sortNo = req.sortNo,
                     isActive = req.isActive,
                     createdAt = now,
@@ -267,7 +286,9 @@ class ProductSkuSpecService(
         val entity = valueRepository.findById(valueId).orElseThrow { BizException("属性取值不存在") }
         val newCode = req.code.trim().uppercase()
         if (entity.code != newCode) throw BizException("属性取值编码创建后不可修改")
-        entity.name = req.name.trim()
+        val (i18nMap, name) = resolveSkuNameI18n(req.name, req.i18n)
+        entity.name = name
+        entity.i18n = i18nMap
         entity.sortNo = req.sortNo
         entity.isActive = req.isActive
         entity.updatedAt = OffsetDateTime.now()
@@ -299,11 +320,37 @@ class ProductSkuSpecService(
             } else {
                 emptyList()
             }
-        return SkuAttrDimensionView(entity.id!!, entity.code, entity.name, entity.sortNo, entity.isActive, values)
+        return SkuAttrDimensionView(
+            entity.id!!, entity.code, entity.name, resolveNameI18n(entity.i18n, entity.name),
+            entity.sortNo, entity.isActive, values,
+        )
     }
 
     private fun toValueView(entity: SkuAttrValueEntity) =
-        SkuAttrValueView(entity.id!!, entity.dimensionId, entity.code, entity.name, entity.sortNo, entity.isActive)
+        SkuAttrValueView(
+            entity.id!!, entity.dimensionId, entity.code, entity.name,
+            resolveNameI18n(entity.i18n, entity.name), entity.sortNo, entity.isActive,
+        )
+
+    private fun resolveNameI18n(i18n: Map<String, String>, fallbackName: String): Map<String, String> =
+        if (i18n.isNotEmpty()) i18n else I18nLocaleSupport.fromBilingual(fallbackName, fallbackName)
+
+    private fun resolveSkuNameI18n(name: String?, i18n: Map<String, String>?): Pair<Map<String, String>, String> {
+        val map = linkedMapOf<String, String>()
+        i18n?.forEach { (k, v) ->
+            val key = k.trim()
+            val valStr = v.trim()
+            if (key.isNotEmpty() && valStr.isNotEmpty()) map[key] = valStr
+        }
+        if (map.isEmpty()) {
+            val n = name?.trim().orEmpty()
+            if (n.isBlank()) throw BizException("英文名称（en-US）不能为空")
+            return I18nLocaleSupport.fromBilingual(n, n) to n
+        }
+        val en = map["en-US"]?.trim().orEmpty()
+        if (en.isBlank()) throw BizException("英文名称（en-US）不能为空")
+        return map to en
+    }
 }
 
 @RestController

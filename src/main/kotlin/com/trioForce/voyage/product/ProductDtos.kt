@@ -17,7 +17,8 @@ data class ProductImageRef(
 )
 
 data class ProductAdminUpsertRequest(
-    @field:NotBlank val title: String,
+    val title: String? = null,
+    val i18n: Map<String, Map<String, String>>? = null,
     @field:DecimalMin("0.01") val price: BigDecimal,
     /** 划线原价；须 ≥ [price]；null 表示清空划线价 */
     @field:DecimalMin("0.01") val listPrice: BigDecimal? = null,
@@ -46,6 +47,7 @@ data class ProductView(
     /** 对外雪花 ID（十进制字符串） */
     val id: String,
     val title: String,
+    val i18n: Map<String, Map<String, String>> = emptyMap(),
     val moq: Int,
     val description: String?,
     val skuCode: String?,

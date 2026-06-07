@@ -1,7 +1,9 @@
 package com.trioForce.voyage.product
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.annotations.Where
+import org.hibernate.type.SqlTypes
 import java.math.BigDecimal
 import java.time.OffsetDateTime
 
@@ -44,6 +46,11 @@ class ProductEntity(
 
     @Column(columnDefinition = "text")
     var description: String? = null,
+
+    /** locale → { title, description } */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    var i18n: Map<String, Map<String, String>> = emptyMap(),
 
     @Column(name = "sku_code", length = 64)
     var skuCode: String? = null,

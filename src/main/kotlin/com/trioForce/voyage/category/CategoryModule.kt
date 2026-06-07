@@ -13,7 +13,10 @@ import com.trioForce.voyage.common.ok
 import jakarta.persistence.*
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import com.trioForce.voyage.i18n.I18nLocaleSupport
+import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.annotations.Where
+import org.hibernate.type.SqlTypes
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -32,6 +35,9 @@ class CategoryEntity(
     var nameZh: String,
     @Column(name = "name_en", nullable = false, length = 120)
     var nameEn: String,
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    var i18n: Map<String, String> = emptyMap(),
     @Column(nullable = false, unique = true, length = 80)
     var code: String,
     @Column(name = "sort_no", nullable = false)
@@ -65,8 +71,9 @@ interface CategoryRepository : JpaRepository<CategoryEntity, Long> {
 
 data class CategoryUpsertRequest(
     val parentId: Long? = null,
-    @field:NotBlank val nameZh: String,
-    @field:NotBlank val nameEn: String,
+    val nameZh: String? = null,
+    val nameEn: String? = null,
+    val i18n: Map<String, String>? = null,
     @field:NotBlank val code: String,
     val sortNo: Int = 0,
     val isActive: Boolean = true
@@ -77,6 +84,7 @@ data class CategoryView(
     val parentId: Long?,
     val nameZh: String,
     val nameEn: String,
+    val i18n: Map<String, String>,
     val code: String,
     val sortNo: Int,
     val isActive: Boolean
@@ -102,11 +110,13 @@ class CategoryService(private val categoryRepository: CategoryRepository) {
         val code = req.code.trim().uppercase()
         if (code.isBlank()) throw BizException("分类编码不能为空")
         val now = OffsetDateTime.now()
+        val (i18nMap, nameZh, nameEn) = resolveCategoryI18n(req)
         val entity = categoryRepository.save(
             CategoryEntity(
                 parentId = req.parentId,
-                nameZh = req.nameZh.trim(),
-                nameEn = req.nameEn.trim(),
+                nameZh = nameZh,
+                nameEn = nameEn,
+                i18n = i18nMap,
                 code = code,
                 sortNo = req.sortNo,
                 isActive = req.isActive,
@@ -127,9 +137,11 @@ class CategoryService(private val categoryRepository: CategoryRepository) {
         }
         validateParent(req.parentId, selfId = id)
         val now = OffsetDateTime.now()
+        val (i18nMap, nameZh, nameEn) = resolveCategoryI18n(req)
         entity.parentId = req.parentId
-        entity.nameZh = req.nameZh.trim()
-        entity.nameEn = req.nameEn.trim()
+        entity.nameZh = nameZh
+        entity.nameEn = nameEn
+        entity.i18n = i18nMap
         entity.code = req.code.trim().uppercase()
         entity.sortNo = req.sortNo
         entity.isActive = req.isActive
@@ -154,8 +166,30 @@ class CategoryService(private val categoryRepository: CategoryRepository) {
         categoryRepository.save(entity)
     }
 
-    private fun toView(it: CategoryEntity) =
-        CategoryView(it.id!!, it.parentId, it.nameZh, it.nameEn, it.code, it.sortNo, it.isActive)
+    private fun toView(it: CategoryEntity): CategoryView {
+        val i18n = if (it.i18n.isNotEmpty()) it.i18n else I18nLocaleSupport.fromBilingual(it.nameZh, it.nameEn)
+        return CategoryView(it.id!!, it.parentId, it.nameZh, it.nameEn, i18n, it.code, it.sortNo, it.isActive)
+    }
+
+    /** 从请求体解析 i18n 并同步中英列（英文必填） */
+    private fun resolveCategoryI18n(req: CategoryUpsertRequest): Triple<Map<String, String>, String, String> {
+        val map = linkedMapOf<String, String>()
+        req.i18n?.forEach { (k, v) ->
+            val key = k.trim()
+            val valStr = v.trim()
+            if (key.isNotEmpty() && valStr.isNotEmpty()) map[key] = valStr
+        }
+        if (map.isEmpty()) {
+            val zh = req.nameZh?.trim().orEmpty()
+            val en = req.nameEn?.trim().orEmpty()
+            if (en.isBlank()) throw BizException("英文名称（en-US）不能为空")
+            return Triple(I18nLocaleSupport.fromBilingual(zh.ifEmpty { en }, en), zh.ifEmpty { en }, en)
+        }
+        val en = map["en-US"]?.trim().orEmpty()
+        if (en.isBlank()) throw BizException("英文名称（en-US）不能为空")
+        val (zh, enCol) = I18nLocaleSupport.syncBilingualColumns(map)
+        return Triple(map, zh, enCol)
+    }
 
     /** 仅允许二级：父级必须是一级分类，且不能选自身 */
     private fun validateParent(parentId: Long?, selfId: Long?) {

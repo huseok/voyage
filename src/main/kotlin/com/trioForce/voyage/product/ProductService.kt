@@ -9,6 +9,7 @@ import com.trioForce.voyage.shipping.ShippingTemplateRepository
 import com.trioForce.voyage.tag.ProductTagEntity
 import com.trioForce.voyage.tag.ProductTagRepository
 import com.trioForce.voyage.tag.TagRepository
+import com.trioForce.voyage.i18n.I18nLocaleSupport
 import com.trioForce.voyage.tag.TagView
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.data.domain.PageRequest
@@ -174,17 +175,19 @@ class ProductService(
         validateAdminPhysical(req)
         val now = OffsetDateTime.now()
         val publicId = snowflakeIdGenerator.nextIdString()
+        val (i18nMap, title, description) = resolveProductI18nFromRequest(req)
         val entity = productRepository.save(
             ProductEntity(
                 id = null,
                 publicId = publicId,
-                title = req.title.trim(),
+                title = title,
                 price = req.price,
                 listPrice = normalizeListPrice(req.listPrice, req.price),
                 costPrice = req.costPrice,
                 currency = req.currency.uppercase(),
                 moq = req.moq,
-                description = req.description?.trim(),
+                description = description,
+                i18n = i18nMap,
                 skuCode = req.skuCode?.trim(),
                 hsCode = req.hsCode?.trim(),
                 unit = req.unit?.trim(),
@@ -210,13 +213,15 @@ class ProductService(
         validateAdminPhysical(req)
         val entity = productLookup.requireEntityByClientKey(clientProductKey)
         val id = entity.id!!
-        entity.title = req.title.trim()
+        val (i18nMap, title, description) = resolveProductI18nFromRequest(req)
+        entity.title = title
         entity.price = req.price
         entity.listPrice = normalizeListPrice(req.listPrice, req.price)
         entity.costPrice = req.costPrice
         entity.currency = req.currency.uppercase()
         entity.moq = req.moq
-        entity.description = req.description?.trim()
+        entity.description = description
+        entity.i18n = i18nMap
         entity.skuCode = req.skuCode?.trim()
         entity.hsCode = req.hsCode?.trim()
         entity.unit = req.unit?.trim()
@@ -356,7 +361,10 @@ class ProductService(
                     if (forStorefront) te.showOnStorefront else true
                 }
                 .sortedWith(compareBy({ it.sortNo }, { it.id ?: 0L }))
-                .map { te -> TagView(te.id!!, te.code, te.nameZh, te.nameEn, te.sortNo, te.isActive, te.showOnStorefront) }
+                .map { te ->
+                    val map = if (te.i18n.isNotEmpty()) te.i18n else I18nLocaleSupport.fromBilingual(te.nameZh, te.nameEn)
+                    TagView(te.id!!, te.code, te.nameZh, te.nameEn, map, te.sortNo, te.isActive, te.showOnStorefront)
+                }
         }
     }
 
@@ -456,9 +464,20 @@ class ProductService(
         val resolvedGallery = gallery ?: productMediaRepository.findAllByProductIdOrderBySortNoAscIdAsc(it.id!!).map { m ->
             ProductImageView(thumbUrl = m.thumbUrl, fullUrl = m.fullUrl)
         }
+        val i18n = if (it.i18n.isNotEmpty()) {
+            it.i18n
+        } else {
+            mapOf(
+                "en-US" to mapOf(
+                    "title" to it.title,
+                    "description" to (it.description.orEmpty()),
+                ).filterValues { v -> v.isNotBlank() },
+            )
+        }
         return ProductView(
             id = it.publicId,
             title = it.title,
+            i18n = i18n,
             moq = it.moq,
             description = it.description,
             skuCode = it.skuCode,
@@ -480,6 +499,34 @@ class ProductService(
             costPrice = if (exposeCost) it.costPrice else null,
             currency = it.currency
         )
+    }
+
+    /** 从请求解析商品 i18n，并同步 title/description 主列（英文必填） */
+    private fun resolveProductI18nFromRequest(req: ProductAdminUpsertRequest): Triple<Map<String, Map<String, String>>, String, String?> {
+        val map = linkedMapOf<String, Map<String, String>>()
+        req.i18n?.forEach { (locale, fields) ->
+            val loc = locale.trim()
+            if (loc.isEmpty()) return@forEach
+            val bucket = linkedMapOf<String, String>()
+            fields.forEach { (k, v) ->
+                val key = k.trim()
+                val valStr = v.trim()
+                if (key.isNotEmpty() && valStr.isNotEmpty()) bucket[key] = valStr
+            }
+            if (bucket.isNotEmpty()) map[loc] = bucket
+        }
+        if (map.isEmpty()) {
+            val title = req.title?.trim().orEmpty()
+            if (title.isBlank()) throw BizException("英文标题（en-US / title）不能为空")
+            val desc = req.description?.trim()
+            val bucket = linkedMapOf("title" to title)
+            if (!desc.isNullOrBlank()) bucket["description"] = desc
+            map["en-US"] = bucket
+        }
+        val enTitle = map["en-US"]?.get("title")?.trim().orEmpty()
+        if (enTitle.isBlank()) throw BizException("英文标题（en-US）不能为空")
+        val enDesc = map["en-US"]?.get("description")?.trim()?.ifEmpty { null }
+        return Triple(map, enTitle, enDesc)
     }
 
     /** 划线价须不低于售价；null 表示不设划线价 */
