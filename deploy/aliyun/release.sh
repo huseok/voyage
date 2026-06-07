@@ -75,6 +75,21 @@ release_wants_fallback() {
   return 0
 }
 
+# quick 模式宿主 Gradle 失败后是否改 standard：交互 [y/N] 默认否；非交互默认否（仅 RELEASE_BACKEND_QUICK_FAIL_AUTO_STANDARD=1 时自动改）。
+release_wants_standard_after_quick_fail() {
+  if [[ -t 0 ]]; then
+    read -r -p "[release] 是否改用容器内 Gradle（standard）构建镜像？耗时更长但可不依赖宿主编译。 [y/N] " _yn || true
+    [[ "${_yn:-}" =~ ^[yY](es)?$ ]]
+    return $?
+  fi
+  if [[ "${RELEASE_BACKEND_QUICK_FAIL_AUTO_STANDARD:-}" == "1" ]]; then
+    log "非交互环境且 RELEASE_BACKEND_QUICK_FAIL_AUTO_STANDARD=1，自动改用 standard"
+    return 0
+  fi
+  log "非交互环境：默认不自动改 standard（需显式 RELEASE_BACKEND_QUICK_FAIL_AUTO_STANDARD=1）"
+  return 1
+}
+
 docker_compose() {
   # Compose V2（docker compose）与新版 Docker 配套。Ubuntu 自带 Python **docker-compose 1.29** 会 KeyError: ContainerConfig，禁止默认使用。
   if docker compose version >/dev/null 2>&1; then
@@ -153,7 +168,7 @@ Globuy 一键发版脚本（详见 deploy/aliyun/DEPLOY_STEP_BY_STEP.md）
   RELEASE_FRONTEND_COMPILER_SCOPE  前端 React Compiler：0=关闭 1=仅买家端（排除 src/admin）2=全 src 含后台。默认 0；详见 foreign-trade-shop vite.config.ts
   RELEASE_FRONTEND_NICE_BUILD       设为 1：前端 npm run build 使用 nice -n 15，减轻抢满 CPU（墙钟时间略增）
   RELEASE_GIT_PULL_NO_AUTO_SKIP    设为 1：非交互下 git pull 失败后将不再自动「跳过 pull 继续」
-  RELEASE_BACKEND_QUICK_FAIL_NO_STANDARD 设为 1：宿主 Gradle 失败后不自动改 standard
+  RELEASE_BACKEND_QUICK_FAIL_AUTO_STANDARD  设为 1：非交互下宿主 Gradle 失败后才自动改 standard（默认不自动，等同 [y/N] 选 N）
   RELEASE_GRADLE_MAX_HEAP         宿主 Gradle 堆上限；≤3GB 内存机未设置时脚本默认 768m
   RELEASE_AUTO_STOP_API_ON_LOW_MEM  默认 1：小内存机发版前自动停 API（等效 --stop-api-first）
   RELEASE_DOCKER_FAIL_NO_AUTO_FULL 设为 1：Docker 失败后不自动 --no-cache 重建
@@ -339,7 +354,7 @@ if [[ "$DO_BACKEND" -eq 1 ]]; then
       log "后端构建模式：quick（宿主 ./gradlew bootJar，镜像仅 COPY JAR，通常明显更快）"
       if ! globuy_host_gradle_boot_jar 0; then
         log "宿主 Gradle 失败"
-        if release_wants_fallback "是否改用容器内 Gradle（standard）构建镜像？耗时更长但可不依赖宿主编译。" "RELEASE_BACKEND_QUICK_FAIL_NO_STANDARD"; then
+        if release_wants_standard_after_quick_fail; then
           BACKEND_BUILD_MODE=standard
           compose_files=(-f "$COMPOSE_REL")
           log "已切换为 standard，将在 Docker 镜像构建阶段执行 Gradle"

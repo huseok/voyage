@@ -17,7 +17,63 @@ bash /opt/globuy/repo/voyage/deploy/aliyun/release.sh
 
 ## 快捷命令（可选，仅服务器配置）
 
-不必每次输入 **`/opt/globuy/repo/voyage/...`** 全路径：在服务器上用软链接、`~/bin` 或别名即可（**不改仓库脚本**）。完整可复制命令见 **[`README.md`](./README.md)「快捷命令」**。
+不必每次输入 **`/opt/globuy/repo/voyage/...`** 全路径：在服务器上用软链接、`~/bin` 或别名即可（**不改仓库脚本**）。与 **[`README.md`](./README.md)「快捷命令」** 同步；下文为服务器上**可复制的一键配置**与命令对照。
+
+### 首次配置（`/usr/local/bin` 软链接，推荐）
+
+```bash
+cd /opt/globuy/repo/voyage
+git pull
+chmod +x deploy/publish-*.sh deploy/aliyun/*.sh
+
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-stop.sh                  /usr/local/bin/globuy-stop
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-restart.sh               /usr/local/bin/globuy-restart
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-backend-quick.sh         /usr/local/bin/globuy-backend-quick
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-backend.sh               /usr/local/bin/globuy-backend
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-backend-full.sh            /usr/local/bin/globuy-backend-full
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-compile-backend-quick.sh /usr/local/bin/globuy-compile-quick
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-compile-backend-full.sh  /usr/local/bin/globuy-compile-full
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-frontend.sh              /usr/local/bin/globuy-frontend
+sudo ln -sf /opt/globuy/repo/voyage/deploy/aliyun/release.sh                /usr/local/bin/globuy-release
+
+# 可选：保留旧习惯路径 /opt/publish-backend.sh
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-backend-quick.sh /opt/publish-backend.sh
+
+which globuy-stop globuy-restart globuy-backend-quick
+```
+
+`git pull` 若报 `publish-backend.sh` 仅权限冲突：`git checkout -- deploy/publish-backend.sh` 后再 pull，然后重新 `chmod +x`。
+
+### 短命令对照表
+
+| 短命令 | 等价脚本 | 作用 |
+|--------|----------|------|
+| `globuy-stop` | `deploy/publish-stop.sh` | 停 Nginx + Docker（db + API） |
+| `globuy-restart` | `deploy/publish-restart.sh` | 拉起 Docker + Nginx（不编译） |
+| `globuy-backend-quick` | `deploy/publish-backend-quick.sh` | **日常后端发版**（pull + 宿主 bootJar + Dockerfile.fast） |
+| `globuy-backend` | `deploy/publish-backend.sh` | 同 quick（兼容旧名） |
+| `globuy-compile-quick` | `deploy/publish-compile-backend-quick.sh` | 仅宿主增量 `bootJar` |
+| `globuy-compile-full` | `deploy/publish-compile-backend-full.sh` | 仅宿主 `clean bootJar` |
+| `globuy-backend-full` | `deploy/publish-backend-full.sh` | Docker 无缓存重建（**小内存机勿用**） |
+| `globuy-frontend` | `deploy/publish-frontend.sh` | 仅前端 build + rsync |
+| `globuy-release` | `deploy/aliyun/release.sh` | 前后端一起发版 |
+
+### 小内存机发版（约 1.6～2GB、无 Swap 或 Swap 较小）
+
+```bash
+globuy-stop
+sudo systemctl stop docker          # 编译期间临时停 dockerd，编完再 start
+cd /opt/globuy/repo/voyage && ./gradlew --stop
+free -h                             # 看 available，建议 > 800Mi
+
+RELEASE_GRADLE_MAX_HEAP=512m globuy-backend-quick
+
+sudo systemctl start docker
+globuy-restart
+curl -sS http://127.0.0.1:8080/api/v1/tags | head
+```
+
+≤3GB 内存且未设置 `RELEASE_GRADLE_MAX_HEAP` 时，脚本默认 Gradle **768m** 并提示可先 `globuy-stop`。
 
 选项与路径覆盖见 **`./deploy/aliyun/release.sh --help`**（含 `--no-pull`、`--frontend-only`、`--backend-only`、`--no-nginx`、**`--stop-api-first`**、**`--backend-standard`**（无 JDK 时用）、**`--backend-quick`**（与默认相同）、**`--backend-full`**（无缓存全量构建）及 `GLOBUY_ROOT` 等）。**首次装机**仍建议按下面步骤准备目录、`env.backend` 与 Nginx 站点配置。
 
@@ -376,17 +432,36 @@ DOCKER_BUILDKIT=0 docker-compose -f deploy/aliyun/docker-compose.stack.yml \
 
 ## 停止 / 重启栈（备忘）
 
-在后端仓库目录：
+**推荐（已配短命令）：**
+
+```bash
+globuy-stop      # 停 Nginx + docker compose stop（不删数据）
+globuy-restart   # docker compose up -d + nginx reload/start
+```
+
+**未配短命令时：**
+
+```bash
+bash /opt/globuy/repo/voyage/deploy/aliyun/stop.sh
+bash /opt/globuy/repo/voyage/deploy/aliyun/restart.sh
+```
+
+仅停/启 API：`globuy-stop --backend-only --api-only` / `globuy-restart --backend-only --api-only`。
+
+仅重启 API 容器（底层 compose，需在后端仓库目录）：
 
 ```bash
 cd /opt/globuy/repo/voyage
-DOCKER_BUILDKIT=0 docker-compose -f deploy/aliyun/docker-compose.stack.yml --env-file /opt/globuy/config/env.backend down
+docker compose -f deploy/aliyun/docker-compose.stack.yml \
+  --env-file /opt/globuy/config/env.backend restart voyage-api
 ```
 
-仅重启 API（示例）：
+**彻底拆除栈（慎用，一般维护用 stop 即可）：**
 
 ```bash
-DOCKER_BUILDKIT=0 docker-compose -f deploy/aliyun/docker-compose.stack.yml --env-file /opt/globuy/config/env.backend restart voyage-api
+cd /opt/globuy/repo/voyage
+DOCKER_BUILDKIT=0 docker compose -f deploy/aliyun/docker-compose.stack.yml \
+  --env-file /opt/globuy/config/env.backend down
 ```
 
 **删除数据库卷（慎重）**：`down -v` 会删掉 compose 管理的命名卷；本方案 Postgres 数据在 **bind mount** `/opt/globuy/data/postgres`，删容器不等于删该目录，需手工 `rm` 才清空。

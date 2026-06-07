@@ -38,6 +38,8 @@ sudo chmod +x /opt/globuy/repo/voyage/deploy/publish-*.sh \
 
 之后示例：`globuy-release`、`globuy-backend-quick`、`globuy-backend-full`、**`globuy-stop`**、**`globuy-restart`**。若代码不在默认路径，调用前设置 **`export GLOBUY_ROOT=…`**（或 **`VOYAGE_REPO`**）即可。
 
+**命令对照表与小内存发版流程**见 **[`DEPLOY_STEP_BY_STEP.md`](./DEPLOY_STEP_BY_STEP.md)「快捷命令」** 一节（与本文同步）。
+
 ## 一键停止 / 重启（不重新发版）
 
 | 脚本 | 作用 |
