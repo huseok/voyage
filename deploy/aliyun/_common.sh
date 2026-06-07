@@ -15,7 +15,7 @@ globuy_resolve_script_dir() {
 
 # 若调用方已定义 log/die（如 release.sh 用 [release] 前缀），则复用调用方实现。
 if ! declare -f log >/dev/null 2>&1; then
-  log() { printf '[globuy] %s\n' "$*"; }
+  log() { printf '[globuy] %s\n' "$*" >&2; }
 fi
 if ! declare -f die >/dev/null 2>&1; then
   die() { echo "[globuy] 错误: $*" >&2; exit 1; }
@@ -80,21 +80,15 @@ globuy_apply_low_memory_defaults() {
   fi
 }
 
-# 返回 -Dorg.gradle.jvmargs=... 以可靠覆盖仓库内 org.gradle.jvmargs=-Xmx1536m。
-globuy_gradle_jvmargs_prop() {
-  globuy_apply_low_memory_defaults
-  if [[ -n "${RELEASE_GRADLE_MAX_HEAP:-}" ]]; then
-    printf '%s' "-Dorg.gradle.jvmargs=-Xmx${RELEASE_GRADLE_MAX_HEAP} -Dfile.encoding=UTF-8 -Djava.net.preferIPv4Stack=true"
-  fi
-}
-
 # 宿主机构建 bootJar。full=1 时先 clean；自动停 Daemon，单进程 --no-daemon，减轻小机 OOM 假死。
 globuy_host_gradle_boot_jar() {
   local full="${1:-0}"
-  local jvmargs_prop gradle_extra=()
+  local gradle_extra=()
   command -v java >/dev/null || die "需要已安装 JDK（建议 17）；无 JDK 请用 build-backend-full.sh --backend-standard"
-  jvmargs_prop=$(globuy_gradle_jvmargs_prop)
-  [[ -n "$jvmargs_prop" ]] && gradle_extra+=("$jvmargs_prop")
+  globuy_apply_low_memory_defaults
+  if [[ -n "${RELEASE_GRADLE_MAX_HEAP:-}" ]]; then
+    gradle_extra+=("-Dorg.gradle.jvmargs=-Xmx${RELEASE_GRADLE_MAX_HEAP} -Dfile.encoding=UTF-8 -Djava.net.preferIPv4Stack=true")
+  fi
   (
     cd "$VOYAGE_REPO"
     chmod +x ./gradlew 2>/dev/null || true

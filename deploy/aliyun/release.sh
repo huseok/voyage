@@ -8,7 +8,7 @@
 # 环境变量可覆盖默认路径，见脚本内 GLOBUY_ROOT / VOYAGE_REPO / FRONTEND_REPO 等。
 set -euo pipefail
 
-log() { printf '[release] %s\n' "$*"; }
+log() { printf '[release] %s\n' "$*" >&2; }
 die() { echo "[release] 错误: $*" >&2; exit 1; }
 
 # shellcheck source=deploy/aliyun/_common.sh
