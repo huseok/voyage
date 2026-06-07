@@ -11,6 +11,10 @@ set -euo pipefail
 log() { printf '[release] %s\n' "$*"; }
 die() { echo "[release] 错误: $*" >&2; exit 1; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=deploy/aliyun/_common.sh
+source "$SCRIPT_DIR/_common.sh"
+
 # 快速步骤失败时打印可复制的「全量」命令（依赖 RELEASE_VERBOSE / --frontend-clean / --backend-full 等）
 print_full_retry_commands() {
   [[ "${RELEASE_SUPPRESS_RETRY_HINT:-}" == "1" ]] && return 0
@@ -41,7 +45,8 @@ bash $vr/deploy/aliyun/release.sh --backend-only --backend-standard
 
 # 若使用 /opt 入口（路径按你机器调整）：
 # RELEASE_VERBOSE=1 /opt/publish-frontend.sh --frontend-clean
-# /opt/publish-backend.sh --backend-full
+# RELEASE_GRADLE_MAX_HEAP=768m /opt/publish-backend-quick.sh
+# /opt/publish-backend-full.sh --no-pull
 EOF
   echo "[release] ---------------------------------------------------------------" >&2
   echo "" >&2
@@ -149,6 +154,8 @@ Globuy 一键发版脚本（详见 deploy/aliyun/DEPLOY_STEP_BY_STEP.md）
   RELEASE_FRONTEND_NICE_BUILD       设为 1：前端 npm run build 使用 nice -n 15，减轻抢满 CPU（墙钟时间略增）
   RELEASE_GIT_PULL_NO_AUTO_SKIP    设为 1：非交互下 git pull 失败后将不再自动「跳过 pull 继续」
   RELEASE_BACKEND_QUICK_FAIL_NO_STANDARD 设为 1：宿主 Gradle 失败后不自动改 standard
+  RELEASE_GRADLE_MAX_HEAP         宿主 Gradle 堆上限；≤3GB 内存机未设置时脚本默认 768m
+  RELEASE_AUTO_STOP_API_ON_LOW_MEM  默认 1：小内存机发版前自动停 API（等效 --stop-api-first）
   RELEASE_DOCKER_FAIL_NO_AUTO_FULL 设为 1：Docker 失败后不自动 --no-cache 重建
   RELEASE_RSYNC_NO_AUTO_RETRY      设为 1：rsync 失败后不自动重试一次
   RELEASE_NGINX_FAIL_NO_SKIP       设为 1：nginx 失败后不提示忽略（交互仍可选取消）
@@ -309,9 +316,19 @@ if [[ "$DO_FRONTEND" -eq 1 ]]; then
 fi
 
 if [[ "$DO_BACKEND" -eq 1 ]]; then
+  # 2GB 等小内存机：构建前默认停 API，把内存让给 Gradle（可用 RELEASE_AUTO_STOP_API_ON_LOW_MEM=0 关闭）
+  if [[ "$STOP_API_BEFORE_BUILD" -eq 0 ]] && [[ "${RELEASE_AUTO_STOP_API_ON_LOW_MEM:-1}" == "1" ]] && globuy_is_low_memory_server; then
+    STOP_API_BEFORE_BUILD=1
+    log "小内存机默认构建前停止 API（等效 --stop-api-first；RELEASE_AUTO_STOP_API_ON_LOW_MEM=0 可关闭）"
+  fi
+
   compose_files=(-f "$COMPOSE_REL")
   if [[ "$BACKEND_BUILD_MODE" == quick ]]; then
     compose_files+=(-f "$COMPOSE_QUICK_REL")
+  fi
+
+  if [[ "$BACKEND_BUILD_MODE" == full ]] && globuy_is_low_memory_server; then
+    log "警告: 约 2GB 内存不建议 --backend-full（容器内无缓存 Gradle 极易 OOM）；优先 globuy-backend-quick 或 globuy-compile-quick"
   fi
 
   case "$BACKEND_BUILD_MODE" in
@@ -319,13 +336,8 @@ if [[ "$DO_BACKEND" -eq 1 ]]; then
       log "后端构建模式：standard（容器内 Gradle；源码变更会使镜像层失效，往往每次整编，较慢但无需宿主 JDK）"
       ;;
     quick)
-      command -v java >/dev/null || die "quick 模式（默认）需要服务器已安装 JDK（建议 17）；未装 JDK 请执行：--backend-standard 或 BACKEND_BUILD_MODE=standard"
       log "后端构建模式：quick（宿主 ./gradlew bootJar，镜像仅 COPY JAR，通常明显更快）"
-      if ! (
-        cd "$VOYAGE_REPO"
-        chmod +x ./gradlew 2>/dev/null || true
-        ./gradlew bootJar -x test
-      ); then
+      if ! globuy_host_gradle_boot_jar 0; then
         log "宿主 Gradle 失败"
         if release_wants_fallback "是否改用容器内 Gradle（standard）构建镜像？耗时更长但可不依赖宿主编译。" "RELEASE_BACKEND_QUICK_FAIL_NO_STANDARD"; then
           BACKEND_BUILD_MODE=standard
