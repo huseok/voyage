@@ -159,6 +159,47 @@ class OrderService(
         return toView(order)
     }
 
+    /** 支付模块读取订单实体（校验归属与待支付状态） */
+    fun getOrderEntityForPayment(orderNo: String): OrderEntity {
+        val userId = CurrentUser.userId()
+        val order = orderRepository.findByOrderNo(orderNo).orElseThrow { BizException("order not found") }
+        if (order.userId != userId) throw BizException("forbidden order")
+        if (order.paymentStatus == "PAID") throw BizException("order already paid")
+        if (order.status != "PENDING_PAYMENT") throw BizException("order is not pending payment")
+        return order
+    }
+
+    /** 创建 PayPal 订单后写入 paypal_order_id */
+    @Transactional
+    fun attachPayPalOrderId(orderNo: String, paypalOrderId: String) {
+        val order = getOrderEntityForPayment(orderNo)
+        order.paypalOrderId = paypalOrderId
+        order.updatedAt = OffsetDateTime.now()
+        orderRepository.save(order)
+    }
+
+    /** PayPal 捕获成功后标记订单已付 */
+    @Transactional
+    fun markPaidFromPayPal(orderNo: String, paypalOrderId: String): OrderView {
+        val userId = CurrentUser.userId()
+        val order = orderRepository.findByOrderNo(orderNo).orElseThrow { BizException("order not found") }
+        if (order.userId != userId) throw BizException("forbidden order")
+        if (order.paymentStatus == "PAID") return toView(order)
+        if (order.status != "PENDING_PAYMENT") throw BizException("order is not pending payment")
+        val existing = order.paypalOrderId?.trim().orEmpty()
+        if (existing.isNotEmpty() && existing != paypalOrderId) {
+            throw BizException("paypal order mismatch")
+        }
+        order.paypalOrderId = paypalOrderId
+        val fromStatus = order.status
+        order.status = "PAID"
+        onBecamePaid(order, fromStatus)
+        order.updatedAt = OffsetDateTime.now()
+        orderRepository.save(order)
+        appendStatusHistory(order.id!!, fromStatus, "PAID", "paypal capture")
+        return toView(order)
+    }
+
     /**
      * 查询当前用户订单列表。
      *

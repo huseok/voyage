@@ -25,15 +25,37 @@
 ```bash
 sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-frontend.sh /usr/local/bin/globuy-frontend
 sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-backend.sh  /usr/local/bin/globuy-backend
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-stop.sh      /usr/local/bin/globuy-stop
+sudo ln -sf /opt/globuy/repo/voyage/deploy/publish-restart.sh   /usr/local/bin/globuy-restart
 sudo ln -sf /opt/globuy/repo/voyage/deploy/aliyun/release.sh    /usr/local/bin/globuy-release
 sudo chmod +x /opt/globuy/repo/voyage/deploy/publish-frontend.sh \
               /opt/globuy/repo/voyage/deploy/publish-backend.sh \
+              /opt/globuy/repo/voyage/deploy/publish-stop.sh \
+              /opt/globuy/repo/voyage/deploy/publish-restart.sh \
               /opt/globuy/repo/voyage/deploy/aliyun/release.sh \
               /opt/globuy/repo/voyage/deploy/aliyun/release-frontend.sh \
-              /opt/globuy/repo/voyage/deploy/aliyun/release-backend.sh
+              /opt/globuy/repo/voyage/deploy/aliyun/release-backend.sh \
+              /opt/globuy/repo/voyage/deploy/aliyun/stop.sh \
+              /opt/globuy/repo/voyage/deploy/aliyun/restart.sh
 ```
 
-之后示例：`globuy-release`、`globuy-frontend --no-pull`、`globuy-backend --backend-standard`。若代码不在默认路径，调用前设置 **`export GLOBUY_ROOT=…`**（或 **`VOYAGE_REPO`**）即可。
+之后示例：`globuy-release`、`globuy-frontend --no-pull`、`globuy-backend --backend-standard`、**`globuy-stop`**（停 Nginx + Docker）、**`globuy-restart`**（恢复运行，不 build）。若代码不在默认路径，调用前设置 **`export GLOBUY_ROOT=…`**（或 **`VOYAGE_REPO`**）即可。
+
+## 一键停止 / 重启（不重新发版）
+
+| 脚本 | 作用 |
+|------|------|
+| `deploy/aliyun/stop.sh` | 停 **Nginx**（前端）+ **`docker compose stop`**（Postgres + API） |
+| `deploy/aliyun/restart.sh` | **`docker compose up -d`** 拉起栈 + **Nginx reload/start**；可选健康检查 |
+| `deploy/publish-stop.sh` / `publish-restart.sh` | 任意目录入口，等价于上表 |
+
+```bash
+bash /opt/globuy/repo/voyage/deploy/aliyun/stop.sh
+bash /opt/globuy/repo/voyage/deploy/aliyun/restart.sh
+# 仅后端 API：--backend-only --api-only
+```
+
+**说明：** 本机前端是 Nginx 托管的静态文件（`/opt/globuy/www/frontend`），没有独立 Node 进程；停止站点即 `systemctl stop nginx`。数据库与上传目录在宿主机 `/opt/globuy/data/`，`stop` 不会删数据。需要拉代码、重新 build 请仍用 **`release.sh`**。
 
 ### 方式 B：`~/bin` + `PATH`（无需 sudo）
 
@@ -41,6 +63,8 @@ sudo chmod +x /opt/globuy/repo/voyage/deploy/publish-frontend.sh \
 mkdir -p ~/bin
 ln -sf /opt/globuy/repo/voyage/deploy/publish-frontend.sh ~/bin/globuy-frontend
 ln -sf /opt/globuy/repo/voyage/deploy/publish-backend.sh  ~/bin/globuy-backend
+ln -sf /opt/globuy/repo/voyage/deploy/publish-stop.sh      ~/bin/globuy-stop
+ln -sf /opt/globuy/repo/voyage/deploy/publish-restart.sh   ~/bin/globuy-restart
 ln -sf /opt/globuy/repo/voyage/deploy/aliyun/release.sh    ~/bin/globuy-release
 chmod +x ~/bin/globuy-*
 grep -q 'export PATH="$HOME/bin:$PATH"' ~/.bashrc || echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
@@ -54,10 +78,12 @@ source ~/.bashrc
 ```bash
 alias gb-front='bash /opt/globuy/repo/voyage/deploy/publish-frontend.sh'
 alias gb-back='bash /opt/globuy/repo/voyage/deploy/publish-backend.sh'
+alias gb-stop='bash /opt/globuy/repo/voyage/deploy/publish-stop.sh'
+alias gb-restart='bash /opt/globuy/repo/voyage/deploy/publish-restart.sh'
 alias gb-all='bash /opt/globuy/repo/voyage/deploy/aliyun/release.sh'
 ```
 
-执行 **`source ~/.bashrc`** 后可用 **`gb-all`** / **`gb-front`** / **`gb-back`**。
+执行 **`source ~/.bashrc`** 后可用 **`gb-all`** / **`gb-front`** / **`gb-back`** / **`gb-stop`** / **`gb-restart`**。
 
 ## 后端 Docker
 

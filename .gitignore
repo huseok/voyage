@@ -1,6 +1,11 @@
 .gradle
 build/
+
+# 构建产物与本地临时 JAR（勿提交；仅保留 Gradle Wrapper）
+*.jar
 !gradle/wrapper/gradle-wrapper.jar
+tmp-*.jar
+*-app.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
 

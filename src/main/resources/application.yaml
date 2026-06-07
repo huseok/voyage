@@ -42,6 +42,11 @@ voyage:
   exchange:
     # 定时任务检查间隔（毫秒），默认 30 分钟；实际拉取频率由库内 refresh_interval_hours 控制
     scheduler-check-ms: ${VOYAGE_EXCHANGE_SCHEDULER_CHECK_MS:1800000}
+  payment:
+    paypal:
+      client-id: ${VOYAGE_PAYPAL_CLIENT_ID:}
+      client-secret: ${VOYAGE_PAYPAL_CLIENT_SECRET:}
+      webhook-id: ${VOYAGE_PAYPAL_WEBHOOK_ID:}
   i18n:
     translation:
       provider: ${VOYAGE_I18N_PROVIDER:deepl}
